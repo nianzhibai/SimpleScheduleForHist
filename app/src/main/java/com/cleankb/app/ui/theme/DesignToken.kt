@@ -63,4 +63,27 @@ object IconSize {
     val md = 20.dp
     val lg = 24.dp
     val xl = 32.dp
+    val xxl = 48.dp
+}
+
+// ==================== 卡片尺寸 ====================
+object CardSize {
+    val minHeight = 80.dp
+    val weatherHeight = 200.dp
+    val courseMinHeight = 100.dp
+}
+
+// ==================== 点击区域 ====================
+object TouchTarget {
+    val minimum = 48.dp  // 无障碍最小点击区域
+    val comfortable = 56.dp  // 舒适点击区域
+}
+
+// ==================== 动画参数 ====================
+object AnimationSpec {
+    const val bounceDampingRatio = 0.5f
+    const val bouncyDampingRatio = 0.6f
+    const val stiffStiffness = 200f
+    const val mediumStiffness = 150f
+    const val lowStiffness = 100f
 }

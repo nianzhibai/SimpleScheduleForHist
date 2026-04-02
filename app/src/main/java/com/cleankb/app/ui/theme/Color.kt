@@ -108,3 +108,34 @@ val CourseColorsDark = listOf(
     Color(0xFF3D2525),  // Rose
     Color(0xFF1D2D4A),  // Blue
 )
+
+// ==================== 渐变色系统 ====================
+// 主渐变 - 用于重要操作按钮
+val PrimaryGradient = listOf(
+    Color(0xFF6366F1),  // Primary
+    Color(0xFF4F46E5),  // Primary Dark
+)
+
+// 次渐变 - 用于次要元素
+val SecondaryGradient = listOf(
+    Color(0xFF14B8A6),
+    Color(0xFF0D9488),
+)
+
+// 成功渐变
+val SuccessGradient = listOf(
+    Color(0xFF10B981),
+    Color(0xFF059669),
+)
+
+// 警告渐变
+val WarningGradient = listOf(
+    Color(0xFFF59E0B),
+    Color(0xFFD97706),
+)
+
+// 错误渐变
+val ErrorGradient = listOf(
+    Color(0xFFEF4444),
+    Color(0xFFDC2626),
+)

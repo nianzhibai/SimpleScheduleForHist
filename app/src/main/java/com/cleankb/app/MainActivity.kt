@@ -5,16 +5,24 @@ import android.os.Bundle
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,13 +37,25 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Checkroom
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MeetingRoom
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Today
+import androidx.compose.material.icons.filled.TipsAndUpdates
+import androidx.compose.material.icons.filled.Umbrella
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material.icons.filled.Weekend
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material3.AlertDialog
@@ -65,9 +85,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -77,15 +100,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.cleankb.app.data.CampusService
+import com.cleankb.app.ui.components.AnimatedBottomNavigation
+import com.cleankb.app.ui.components.AnimatedEmptyState
 import com.cleankb.app.ui.components.AppCard
+import com.cleankb.app.ui.components.CompactCourseCard
 import com.cleankb.app.ui.components.EmptyState
+import com.cleankb.app.ui.components.EnhancedLoadingState
+import com.cleankb.app.ui.components.EnhancedWeatherCard
+import com.cleankb.app.ui.components.FreeRoomSkeletonLoading
 import com.cleankb.app.ui.components.HighlightCard
 import com.cleankb.app.ui.components.LoadingState
 import com.cleankb.app.ui.components.PrimaryButton
 import com.cleankb.app.ui.components.SecondaryButton
 import com.cleankb.app.ui.components.SectionHeader
+import com.cleankb.app.ui.components.TimelineCourseCard
+import com.cleankb.app.ui.components.WeekSkeletonLoading
 import com.cleankb.app.ui.theme.CleanKbTheme
 import com.cleankb.app.ui.theme.Radius
 import com.cleankb.app.ui.theme.Spacing
@@ -102,7 +134,8 @@ import kotlinx.coroutines.withContext
 enum class QueryTab(val title: String) {
     TODAY("今日"),
     WEEK("本周"),
-    FREE_ROOM("空教室")
+    FREE_ROOM("空教室"),
+    WEATHER("天气")
 }
 
 private const val PREFS_NAME = "clean_kb_prefs"
@@ -134,6 +167,7 @@ private sealed interface TabLoadResult {
     data class Today(val data: CampusService.TodaySchedule) : TabLoadResult
     data class Week(val data: CampusService.WeekSchedule) : TabLoadResult
     data class FreeRoom(val data: CampusService.FreeRoomSchedule) : TabLoadResult
+    data class Weather(val data: CampusService.WeatherSummary) : TabLoadResult
 }
 
 private data class RequestUiState(
@@ -221,6 +255,7 @@ private fun CleanKbApp() {
             QueryTab.TODAY -> todayUiState
             QueryTab.WEEK -> weekUiState
             QueryTab.FREE_ROOM -> freeRoomUiState
+            QueryTab.WEATHER -> weatherUiState
         }
     }
 
@@ -229,6 +264,7 @@ private fun CleanKbApp() {
             QueryTab.TODAY -> todayUiState = transform(todayUiState)
             QueryTab.WEEK -> weekUiState = transform(weekUiState)
             QueryTab.FREE_ROOM -> freeRoomUiState = transform(freeRoomUiState)
+            QueryTab.WEATHER -> weatherUiState = transform(weatherUiState)
         }
     }
 
@@ -274,6 +310,7 @@ private fun CleanKbApp() {
                                 selectedBuilding = selectedFreeRoomBuilding
                             )
                         )
+                        QueryTab.WEATHER -> TabLoadResult.Weather(service.queryWeatherData())
                     }
                 }
             }
@@ -290,6 +327,7 @@ private fun CleanKbApp() {
                     is TabLoadResult.Today -> todayData = payload.data
                     is TabLoadResult.Week -> weekData = payload.data
                     is TabLoadResult.FreeRoom -> freeRoomData = payload.data
+                    is TabLoadResult.Weather -> weatherData = payload.data
                 }
             }
             updateTabUiState(tab) {
@@ -301,40 +339,10 @@ private fun CleanKbApp() {
         }
     }
 
-    fun loadWeather() {
-        val id = userId.trim()
-        if (id.isBlank()) {
-            currentPage = AppPage.USER_SETUP
-            return
-        }
-
-        weatherJob?.cancel()
-        val requestId = weatherUiState.requestId + 1
-        weatherUiState = weatherUiState.copy(loading = true, error = null, requestId = requestId)
-
-        weatherJob = scope.launch {
-            val result = withContext(Dispatchers.IO) { runCatching { service.queryWeatherData() } }
-            if (weatherUiState.requestId != requestId) {
-                return@launch
-            }
-            result.onSuccess { weatherData = it }
-            weatherUiState = weatherUiState.copy(
-                loading = false,
-                error = if (result.isFailure) "天气加载失败" else null
-            )
-        }
-    }
-
     LaunchedEffect(selectedTab, userId, refreshVersion) {
         if (userId.isNotBlank()) {
             val tab = QueryTab.entries[selectedTab]
             loadData(tab)
-        }
-    }
-
-    LaunchedEffect(userId, refreshVersion) {
-        if (userId.isNotBlank()) {
-            loadWeather()
         }
     }
 
@@ -349,9 +357,7 @@ private fun CleanKbApp() {
         weatherData = null
         selectedFreeRoomBuilding = null
         activeTabJob?.cancel()
-        weatherJob?.cancel()
         activeTabJob = null
-        weatherJob = null
         activeTabLoad = null
         todayUiState = RequestUiState(requestId = todayUiState.requestId + 1)
         weekUiState = RequestUiState(requestId = weekUiState.requestId + 1)
@@ -455,7 +461,7 @@ private fun CleanKbApp() {
     // 主页面
     Scaffold(
         bottomBar = {
-            ModernNavigationBar(
+            AnimatedBottomNavigation(
                 selectedTab = selectedTab,
                 onTabSelected = { selectedTab = it }
             )
@@ -470,15 +476,6 @@ private fun CleanKbApp() {
             verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
             Spacer(modifier = Modifier.height(Spacing.sm))
-
-            // 天气卡片
-            WeatherCard(
-                data = weatherData,
-                loading = weatherUiState.loading,
-                error = weatherUiState.error,
-                isDark = isDark,
-                onOpenSettings = { currentPage = AppPage.SETTINGS }
-            )
 
             // 错误提示
             if (currentTabUiState.error != null) {
@@ -512,11 +509,15 @@ private fun CleanKbApp() {
             // 内容区域
             Box(modifier = Modifier.fillMaxSize()) {
                 if (currentTabUiState.loading) {
-                    LoadingState(message = "正在加载...")
+                    when (currentTab) {
+                        QueryTab.TODAY, QueryTab.WEEK -> EnhancedLoadingState(message = "正在加载...")
+                        QueryTab.FREE_ROOM -> FreeRoomSkeletonLoading()
+                        QueryTab.WEATHER -> WeatherLoadingCard()
+                    }
                 } else {
                     when (currentTab) {
-                        QueryTab.TODAY -> TodayTab(todayData, isDark)
-                        QueryTab.WEEK -> WeekTab(weekData, isDark)
+                        QueryTab.TODAY -> EnhancedTodayTab(todayData, isDark)
+                        QueryTab.WEEK -> EnhancedWeekTab(weekData, isDark)
                         QueryTab.FREE_ROOM -> FreeRoomTab(
                             data = freeRoomData,
                             selectedBuilding = selectedFreeRoomBuilding,
@@ -531,6 +532,12 @@ private fun CleanKbApp() {
                                 selectedFreeRoomBuilding = b
                                 loadData(QueryTab.FREE_ROOM)
                             }
+                        )
+                        QueryTab.WEATHER -> WeatherTab(
+                            data = weatherData,
+                            loading = weatherUiState.loading,
+                            error = weatherUiState.error,
+                            isDark = isDark
                         )
                     }
                 }
@@ -567,6 +574,7 @@ private fun ModernNavigationBar(
                             QueryTab.TODAY -> Icons.Filled.Today
                             QueryTab.WEEK -> Icons.Filled.CalendarMonth
                             QueryTab.FREE_ROOM -> Icons.Filled.MeetingRoom
+                            QueryTab.WEATHER -> Icons.Filled.Cloud
                         },
                         contentDescription = tab.title
                     )
@@ -638,11 +646,25 @@ private fun WeatherCard(
             // 核心内容
             when {
                 loading && data == null -> {
-                    Text(
-                        text = "正在获取天气...",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                    ) {
+                        WeatherLoadingIcon()
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "正在获取天气...",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "请稍候",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
                 }
                 data != null -> {
                     // 温度行：当前温度 + 体感 | 温度范围
@@ -653,54 +675,147 @@ private fun WeatherCard(
                     ) {
                         Row(
                             verticalAlignment = Alignment.Bottom,
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                        ) {
+                            WeatherIcon(
+                                weatherText = data.currentWeatherText,
+                                rainToday = data.rainToday,
+                                isDark = isDark
+                            )
+                            Column {
+                                Row(
+                                    verticalAlignment = Alignment.Bottom,
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                                ) {
+                                    Text(
+                                        text = "${fmtTemp(data.currentTempC)}°",
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = data.currentWeatherText,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    )
+                                }
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+                                ) {
+                                    // 体感温度
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Text(
+                                            text = "体感",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                        Text(
+                                            text = "${fmtTemp(data.feelTempC)}°",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.tertiary
+                                        )
+                                    }
+                                    // 风速
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Air,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(10.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                        Text(
+                                            text = "${String.format("%.1f", data.windSpeedMps)}m/s",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        // 温度范围
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             Text(
-                                text = "${fmtTemp(data.currentTempC)}°",
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
+                                text = "最高",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             )
                             Text(
-                                text = "${data.currentWeatherText} 体感${fmtTemp(data.feelTempC)}°",
-                                style = MaterialTheme.typography.bodySmall,
+                                text = "${fmtTemp(data.maxTempC)}°",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = "最低 ${fmtTemp(data.minTempC)}°",
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Text(
-                            text = "${fmtTemp(data.minTempC)}°~${fmtTemp(data.maxTempC)}°",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
 
-                    // 提醒文案：只显示一条关键提示
+                    // 提醒文案
                     val tip = data.extraTips.firstOrNull() ?: data.reminder
                     if (tip.isNotBlank()) {
-                        Text(
-                            text = tip,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(Radius.sm))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(Spacing.sm),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.TipsAndUpdates,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = tip,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
                 else -> {
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.CloudQueue,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            modifier = Modifier.size(32.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )
-                        Text(
-                            text = "天气暂无数据",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "天气暂无数据",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "请检查网络连接",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 }
             }
@@ -715,6 +830,85 @@ private fun WeatherCard(
             }
         }
     }
+}
+
+@Composable
+private fun WeatherIcon(
+    weatherText: String,
+    rainToday: Boolean,
+    isDark: Boolean
+) {
+    val icon: ImageVector
+    val iconColor: Color
+
+    when {
+        rainToday -> {
+            icon = Icons.Filled.Umbrella
+            iconColor = if (isDark) Color(0xFF64B5F6) else Color(0xFF1976D2)
+        }
+        weatherText.contains("晴") -> {
+            icon = Icons.Filled.WbSunny
+            iconColor = if (isDark) Color(0xFFFFB74D) else Color(0xFFFFA000)
+        }
+        weatherText.contains("云") || weatherText.contains("阴") -> {
+            icon = Icons.Outlined.CloudQueue
+            iconColor = if (isDark) Color(0xFF90A4AE) else Color(0xFF607D8B)
+        }
+        weatherText.contains("晚") || weatherText.contains("夜") -> {
+            icon = Icons.Filled.NightsStay
+            iconColor = if (isDark) Color(0xFF5C6BC0) else Color(0xFF3F51B5)
+        }
+        else -> {
+            icon = Icons.Filled.WbSunny
+            iconColor = if (isDark) Color(0xFFFFB74D) else Color(0xFFFFA000)
+        }
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "weatherIcon")
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 0.9f,
+        targetValue = 1.1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "iconPulse"
+    )
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.size(56.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = weatherText,
+            tint = iconColor,
+            modifier = Modifier
+                .size(40.dp)
+                .graphicsLayer { scaleX = pulse; scaleY = pulse }
+        )
+    }
+}
+
+@Composable
+private fun WeatherLoadingIcon() {
+    val infiniteTransition = rememberInfiniteTransition(label = "loading")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "loadingAlpha"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .clip(RoundedCornerShape(Radius.md))
+            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
+    )
 }
 
 // ==================== 设置页面 ====================
@@ -1323,6 +1517,17 @@ private fun FreeRoomTab(
         verticalArrangement = Arrangement.spacedBy(Spacing.sm),
         contentPadding = PaddingValues(bottom = Spacing.lg)
     ) {
+        // 时间状态卡片
+        item {
+            FreeRoomTimeStatusCard(
+                currentWeek = data.currentWeek,
+                weekday = data.weekday,
+                season = data.season,
+                timeStatus = data.timeStatus,
+                targetPeriod = data.targetPeriod
+            )
+        }
+
         // 楼栋选择器
         item {
             val anchorLabel = data.anchorBuilding.ifBlank { "未定位最近楼" }
@@ -1398,41 +1603,7 @@ private fun FreeRoomTab(
                     )
                 }
             } else {
-                HighlightCard {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(Spacing.md),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Text(
-                                text = "推荐",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = r.room,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            val compactBuilding = compactFreeRoomBuilding(r.room, r.building)
-                            if (compactBuilding.isNotBlank()) {
-                                Text(
-                                    text = compactBuilding,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        FreePeriodsBlock(periods = r.freePeriods)
-                    }
-                }
+                FreeRoomRecommendedCard(room = r)
             }
         }
 
@@ -1440,43 +1611,395 @@ private fun FreeRoomTab(
         if (data.rooms.isNotEmpty()) {
             val compactRooms = data.rooms.take(DEFAULT_ROOM_LIMIT)
             item {
-                AppCard {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        compactRooms.forEachIndexed { idx, room ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                                ) {
-                                    Text(
-                                        text = room.room,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    val compactBuilding = compactFreeRoomBuilding(room.room, room.building)
-                                    if (compactBuilding.isNotBlank()) {
-                                        Text(
-                                            text = compactBuilding,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                                FreePeriodsBlock(periods = room.freePeriods)
-                            }
-                            if (idx != compactRooms.lastIndex) {
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                            }
-                        }
+                FreeRoomSectionHeader(title = "其他可用教室", count = data.rooms.size)
+            }
+            items(compactRooms.size) { idx ->
+                FreeRoomListCard(room = compactRooms[idx])
+            }
+        }
+    }
+}
+
+@Composable
+private fun FreeRoomTimeStatusCard(
+    currentWeek: String,
+    weekday: Int,
+    season: String,
+    timeStatus: String,
+    targetPeriod: Int
+) {
+    AppCard(
+        gradientColors = listOf(
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Left accent bar
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(36.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.primary,
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                                )
+                            )
+                        )
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "第${currentWeek}周 · ${weekdayName(weekday)}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = timeStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Radius.sm))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                        .padding(horizontal = Spacing.sm, vertical = 4.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.WbSunny,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = season,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Radius.sm))
+                        .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f))
+                        .padding(horizontal = Spacing.sm, vertical = 4.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CalendarToday,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = MaterialTheme.colorScheme.tertiary
+                        )
+                        Text(
+                            text = "第${targetPeriod}节",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun FreeRoomRecommendedCard(room: CampusService.FreeRoomItem) {
+    AppCard(
+        gradientColors = listOf(
+            MaterialTheme.colorScheme.primaryContainer,
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Star,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "推荐教室",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                val periodCount = room.freePeriods.size
+                val availabilityColor = when {
+                    periodCount >= 4 -> MaterialTheme.colorScheme.tertiary
+                    periodCount >= 2 -> MaterialTheme.colorScheme.secondary
+                    else -> MaterialTheme.colorScheme.error
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(Radius.sm))
+                        .background(availabilityColor.copy(alpha = 0.15f))
+                        .padding(horizontal = Spacing.sm, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "${periodCount}节空闲",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = availabilityColor,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = room.room,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    val compactBuilding = compactFreeRoomBuilding(room.room, room.building)
+                    if (compactBuilding.isNotBlank()) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.LocationOn,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                            )
+                            Text(
+                                text = compactBuilding,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+                }
+                FreePeriodsBadges(periods = room.freePeriods)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FreePeriodsBadges(periods: List<Int>) {
+    FlowRow(
+        modifier = Modifier.width(100.dp),
+        horizontalArrangement = Arrangement.End,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        maxItemsInEachRow = 3
+    ) {
+        periods.take(5).forEach { period ->
+            val (bgColor, textColor) = getPeriodColors(period)
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(Radius.xs))
+                    .background(bgColor)
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "$period",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = textColor
+                )
+            }
+        }
+        if (periods.size > 5) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(Radius.xs))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "+${periods.size - 5}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun getPeriodColors(period: Int): Pair<Color, Color> {
+    return when (period) {
+        in 1..2 -> Pair(
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+            MaterialTheme.colorScheme.primary
+        )
+        in 3..4 -> Pair(
+            MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
+            MaterialTheme.colorScheme.secondary
+        )
+        in 5..6 -> Pair(
+            MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f),
+            MaterialTheme.colorScheme.tertiary
+        )
+        in 7..8 -> Pair(
+            MaterialTheme.colorScheme.error.copy(alpha = 0.15f),
+            MaterialTheme.colorScheme.error
+        )
+        else -> Pair(
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun FreeRoomSectionHeader(title: String, count: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = Spacing.sm),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(16.dp)
+                    .clip(RoundedCornerShape(1.5.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(Radius.full))
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+                .padding(horizontal = Spacing.sm, vertical = 2.dp)
+        ) {
+            Text(
+                text = "$count 间",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+private fun FreeRoomListCard(room: CampusService.FreeRoomItem) {
+    AppCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = room.room,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    val periodCount = room.freePeriods.size
+                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                        repeat(minOf(periodCount, 3)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(
+                                        when {
+                                            periodCount >= 4 -> MaterialTheme.colorScheme.tertiary
+                                            periodCount >= 2 -> MaterialTheme.colorScheme.secondary
+                                            else -> MaterialTheme.colorScheme.error
+                                        }
+                                    )
+                            )
+                        }
+                    }
+                }
+                val compactBuilding = compactFreeRoomBuilding(room.room, room.building)
+                if (compactBuilding.isNotBlank()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.LocationOn,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            text = compactBuilding,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            FreePeriodsBadges(periods = room.freePeriods)
         }
     }
 }
@@ -1683,5 +2206,740 @@ private fun mappedOptionForAnchor(anchorBuilding: String): String? {
         "1号楼" -> "西校区(西)1号楼"
         "2号楼" -> "西校区(西)2号楼"
         else -> null
+    }
+}
+
+// ==================== 增强版今日课表 ====================
+@Composable
+private fun EnhancedTodayTab(data: CampusService.TodaySchedule?, isDark: Boolean) {
+    if (data == null) {
+        return AnimatedEmptyState(
+            icon = Icons.Filled.Today,
+            title = "暂无课表数据",
+            subtitle = "请检查网络连接或学号设置"
+        )
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        contentPadding = PaddingValues(bottom = Spacing.xxl)
+    ) {
+        item {
+            SectionHeader(
+                title = "今天课程",
+                subtitle = "第${data.currentWeek}周 | ${weekdayName(data.weekday)}"
+            )
+        }
+
+        if (data.courses.isEmpty()) {
+            item {
+                AppCard {
+                    AnimatedEmptyState(
+                        icon = Icons.Filled.Weekend,
+                        title = "今天没课",
+                        subtitle = "好好休息，享受自由时光"
+                    )
+                }
+            }
+        } else {
+            items(
+                items = data.courses,
+                key = { "${it.name}-${it.section}-${it.location}-${it.beginTime}" }
+            ) { course ->
+                TimelineCourseCard(
+                    course = course,
+                    index = data.courses.indexOf(course),
+                    isDark = isDark,
+                    isCurrent = isCurrentCourse(course, data.courses),
+                    isPast = isPastCourse(course)
+                )
+            }
+        }
+    }
+}
+
+// ==================== 增强版本周课表 ====================
+@Composable
+private fun EnhancedWeekTab(data: CampusService.WeekSchedule?, isDark: Boolean) {
+    if (data == null) {
+        return AnimatedEmptyState(
+            icon = Icons.Filled.CalendarMonth,
+            title = "暂无课表数据",
+            subtitle = "请检查网络连接或学号设置"
+        )
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+        contentPadding = PaddingValues(bottom = Spacing.xxl)
+    ) {
+        item {
+            SectionHeader(
+                title = "本周课表",
+                subtitle = "第${data.currentWeek}周"
+            )
+        }
+
+        items(items = data.days, key = { it.weekday }) { day ->
+            EnhancedWeekDayCard(day = day, isDark = isDark)
+        }
+    }
+}
+
+@Composable
+private fun EnhancedWeekDayCard(day: CampusService.WeekDaySchedule, isDark: Boolean) {
+    AppCard {
+        Column(
+            modifier = Modifier.padding(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = weekdayName(day.weekday),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = "${day.courses.size} 门课",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (day.courses.isEmpty()) {
+                Text(
+                    text = "无课程安排",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                day.courses.forEachIndexed { index, course ->
+                    CompactCourseCard(course = course, isDark = isDark)
+                    if (index < day.courses.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = Spacing.xs),
+                            color = MaterialTheme.colorScheme.outlineVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==================== 课程时间判断工具函数 ====================
+private fun isCurrentCourse(course: CampusService.CourseItem, allCourses: List<CampusService.CourseItem>): Boolean {
+    val now = java.time.LocalTime.now()
+    val beginTime = parseTime(course.beginTime) ?: return false
+    val endTime = parseTime(course.endTime) ?: return false
+    return now.isAfter(beginTime) && now.isBefore(endTime)
+}
+
+private fun isPastCourse(course: CampusService.CourseItem): Boolean {
+    val now = java.time.LocalTime.now()
+    val endTime = parseTime(course.endTime) ?: return false
+    return now.isAfter(endTime)
+}
+
+private fun parseTime(timeStr: String): java.time.LocalTime? {
+    if (timeStr.isBlank()) return null
+    return try {
+        java.time.LocalTime.parse(timeStr)
+    } catch (e: Exception) {
+        null
+    }
+}
+
+// ==================== 天气标签页 ====================
+@Composable
+private fun WeatherTab(
+    data: CampusService.WeatherSummary?,
+    loading: Boolean,
+    error: String?,
+    isDark: Boolean
+) {
+    if (data == null && !loading) {
+        return AnimatedEmptyState(
+            icon = Icons.Filled.Cloud,
+            title = "暂无天气数据",
+            subtitle = "请检查网络连接"
+        )
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        contentPadding = PaddingValues(bottom = Spacing.xxl)
+    ) {
+        if (data != null) {
+            // 天气主卡片
+            item {
+                WeatherHeroCard(data = data, isDark = isDark)
+            }
+
+            // 下雨提醒（如果有雨）
+            if (data.rainToday) {
+                item {
+                    WeatherRainCard(data = data)
+                }
+            }
+
+            // 详细信息
+            item {
+                WeatherInfoRow(data = data)
+            }
+
+            // 穿衣建议
+            if (data.coreAdvice.isNotBlank() || data.temperatureLevel.isNotBlank()) {
+                item {
+                    WeatherDressingCard(data = data)
+                }
+            }
+
+            // 天气提示
+            if (data.extraTips.isNotEmpty()) {
+                item {
+                    WeatherTipsCard(tips = data.extraTips)
+                }
+            }
+        }
+
+        if (error != null) {
+            item {
+                AppCard(
+                    gradientColors = listOf(
+                        MaterialTheme.colorScheme.errorContainer,
+                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(Spacing.md),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.SearchOff,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeatherHeroCard(data: CampusService.WeatherSummary, isDark: Boolean) {
+    val gradientColors = when {
+        data.rainToday -> listOf(
+            if (isDark) Color(0xFF1A2744) else Color(0xFFEFF6FF),
+            if (isDark) Color(0xFF1E3A5F) else Color(0xFFDBEAFE)
+        )
+        data.maxTempC >= 30 -> listOf(
+            if (isDark) Color(0xFF3D2E1A) else Color(0xFFFFF7ED),
+            if (isDark) Color(0xFF4A3520) else Color(0xFFFFEDD5)
+        )
+        else -> listOf(
+            if (isDark) Color(0xFF2D3556) else Color(0xFFEEF2FF),
+            if (isDark) Color(0xFF3D4566) else Color(0xFFE0E7FF)
+        )
+    }
+
+    val shape = RoundedCornerShape(Radius.lg)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 4.dp,
+                shape = shape,
+                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+            )
+            .clip(shape)
+            .background(brush = Brush.verticalGradient(colors = gradientColors))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            // 位置
+            Text(
+                text = data.title,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // 天气图标和温度横向排列
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 天气图标
+                WeatherAnimatedIcon(
+                    weatherText = data.currentWeatherText,
+                    rainToday = data.rainToday,
+                    isDark = isDark
+                )
+
+                // 当前温度
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${fmtTemp(data.currentTempC)}°",
+                        style = MaterialTheme.typography.displayMedium.copy(fontSize = 48.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = data.currentWeatherText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                // 温度范围
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "↑${fmtTemp(data.maxTempC)}°",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "↓${fmtTemp(data.minTempC)}°",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // 体感温度
+            Text(
+                text = "体感 ${fmtTemp(data.feelTempC)}°",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun WeatherAnimatedIcon(
+    weatherText: String,
+    rainToday: Boolean,
+    isDark: Boolean
+) {
+    val icon: ImageVector
+    val iconColor: Color
+
+    when {
+        rainToday -> {
+            icon = Icons.Filled.Umbrella
+            iconColor = if (isDark) Color(0xFF64B5F6) else Color(0xFF1976D2)
+        }
+        weatherText.contains("晴") -> {
+            icon = Icons.Filled.WbSunny
+            iconColor = if (isDark) Color(0xFFFFB74D) else Color(0xFFFFA000)
+        }
+        weatherText.contains("云") || weatherText.contains("阴") -> {
+            icon = Icons.Outlined.CloudQueue
+            iconColor = if (isDark) Color(0xFF90A4AE) else Color(0xFF607D8B)
+        }
+        else -> {
+            icon = Icons.Filled.WbSunny
+            iconColor = if (isDark) Color(0xFFFFB74D) else Color(0xFFFFA000)
+        }
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "weatherIcon")
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 0.9f,
+        targetValue = 1.1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "iconPulse"
+    )
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.size(48.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = weatherText,
+            tint = iconColor,
+            modifier = Modifier
+                .size(40.dp)
+                .graphicsLayer {
+                    scaleX = pulse
+                    scaleY = pulse
+                }
+        )
+    }
+}
+
+@Composable
+private fun WeatherRainCard(data: CampusService.WeatherSummary) {
+    AppCard(
+        gradientColors = listOf(
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.1f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            // 雨伞图标
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Umbrella,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            // 下雨信息
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = "今日有雨",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                // 显示下雨时间段
+                val rainInfo = buildString {
+                    if (data.rainPeriodText != null) {
+                        append(data.rainPeriodText)
+                    }
+                    if (data.rainStart != null) {
+                        val time = data.rainStart.substringAfter(" ").take(5)
+                        if (time.isNotBlank()) {
+                            if (isNotEmpty()) append(" · ")
+                            append(time)
+                        }
+                    }
+                }
+                if (rainInfo.isNotBlank()) {
+                    Text(
+                        text = rainInfo,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // 提示
+            Text(
+                text = "带伞",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun WeatherInfoRow(data: CampusService.WeatherSummary) {
+    AppCard {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            WeatherInfoItem(
+                icon = Icons.Filled.Air,
+                label = "风速",
+                value = "${String.format("%.1f", data.windSpeedMps)}m/s"
+            )
+            WeatherInfoItem(
+                icon = Icons.Filled.WbTwilight,
+                label = "日出",
+                value = data.sunrise
+            )
+            WeatherInfoItem(
+                icon = Icons.Filled.NightsStay,
+                label = "日落",
+                value = data.sunset
+            )
+        }
+    }
+}
+
+@Composable
+private fun WeatherInfoItem(
+    icon: ImageVector,
+    label: String,
+    value: String
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            modifier = Modifier.size(16.dp),
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun WeatherDressingCard(data: CampusService.WeatherSummary) {
+    AppCard {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Checkroom,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "穿衣建议",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            if (data.temperatureLevel.isNotBlank()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    modifier = Modifier.padding(start = Spacing.xs)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(Radius.xs))
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                            .padding(horizontal = Spacing.xs, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = data.temperatureLevel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Text(
+                        text = "体感 ${fmtTemp(data.feelTempC)}°C",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (data.coreAdvice.isNotBlank()) {
+                Text(
+                    text = data.coreAdvice,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.padding(start = Spacing.xs)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeatherTipsCard(tips: List<String>) {
+    AppCard {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.TipsAndUpdates,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "温馨提示",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            tips.forEach { tip ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    verticalAlignment = Alignment.Top,
+                    modifier = Modifier.padding(start = Spacing.xs)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .padding(top = 6.dp)
+                            .size(4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                    )
+                    Text(
+                        text = tip,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 20.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeatherLoadingCard() {
+    val infiniteTransition = rememberInfiniteTransition(label = "loading")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "loadingAlpha"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // 主卡片骨架
+        AppCard {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(280.dp)
+                    .padding(Spacing.lg),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(Spacing.md)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 100.dp, height = 16.dp)
+                        .clip(RoundedCornerShape(Radius.sm))
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
+                )
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
+                )
+                Box(
+                    modifier = Modifier
+                        .size(width = 120.dp, height = 48.dp)
+                        .clip(RoundedCornerShape(Radius.sm))
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
+                )
+                Box(
+                    modifier = Modifier
+                        .size(width = 80.dp, height = 16.dp)
+                        .clip(RoundedCornerShape(Radius.sm))
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha * 0.7f))
+                )
+            }
+        }
+
+        // 信息行骨架
+        AppCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(72.dp)
+                    .padding(Spacing.md),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                repeat(3) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(width = 40.dp, height = 14.dp)
+                                .clip(RoundedCornerShape(Radius.sm))
+                                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
+                        )
+                    }
+                }
+            }
+        }
     }
 }

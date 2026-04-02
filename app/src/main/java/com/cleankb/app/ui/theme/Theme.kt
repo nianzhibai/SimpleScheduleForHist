@@ -6,6 +6,11 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.cleankb.app.ui.theme.ErrorGradient
+import com.cleankb.app.ui.theme.PrimaryGradient
+import com.cleankb.app.ui.theme.SecondaryGradient
+import com.cleankb.app.ui.theme.SuccessGradient
+import com.cleankb.app.ui.theme.WarningGradient
 
 // ==================== 主题模式 ====================
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
@@ -126,3 +131,19 @@ fun CleanKbTheme(
         content = content
     )
 }
+
+// ==================== 颜色工具函数 ====================
+@Composable
+fun primaryGradient(): List<Color> = PrimaryGradient
+
+@Composable
+fun secondaryGradient(): List<Color> = SecondaryGradient
+
+@Composable
+fun successGradient(): List<Color> = SuccessGradient
+
+@Composable
+fun warningGradient(): List<Color> = WarningGradient
+
+@Composable
+fun errorGradient(): List<Color> = ErrorGradient
