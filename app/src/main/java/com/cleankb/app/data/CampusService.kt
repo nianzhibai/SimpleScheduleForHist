@@ -791,7 +791,11 @@ class CampusService {
         val basePeriod = periodCtx.currentPeriod ?: periodCtx.nextPeriod ?: schoolMax
         val target = basePeriod.coerceIn(1, schoolMax)
         val preferOrder = listOf("弘善楼", "弘毅楼")
-        val anchor = detectAnchorBuilding(dayCourses, target)
+        val anchor = detectAnchorBuilding(
+            dayCourses = dayCourses,
+            currentPeriod = periodCtx.currentPeriod,
+            nextPeriod = periodCtx.nextPeriod
+        )
         val selectedToken = selectedBuilding?.trim()?.takeIf { it.isNotBlank() }
         val defaultToken = anchor.takeIf { it.isNotBlank() }
         val activeToken = selectedToken ?: defaultToken
@@ -835,7 +839,12 @@ class CampusService {
         } else {
             allRooms.filter { matchesBuildingSelection(extractBuildingToken(it.building), activeToken) }
         }
-        val roomPool = filteredRooms
+        val availableNowRooms = filteredRooms.filter { target in it.freePeriods }
+        val roomPool = if (availableNowRooms.isNotEmpty()) {
+            availableNowRooms
+        } else {
+            filteredRooms
+        }
 
         val sorted = roomPool.sortedByDescending { scoreRoom(it, target, schoolMax, preferOrder, anchor) }
         val top = sorted.take(limit.coerceAtLeast(1))
@@ -1221,12 +1230,34 @@ class CampusService {
         return 0
     }
 
-    private fun detectAnchorBuilding(dayCourses: List<JSONObject>, targetPeriod: Int): String {
+    private fun detectAnchorBuilding(
+        dayCourses: List<JSONObject>,
+        currentPeriod: Int?,
+        nextPeriod: Int?
+    ): String {
+        if (currentPeriod != null) {
+            var bestStart = -1
+            var best = ""
+            for (c in dayCourses) {
+                val periods = parsePeriodsFromCourse(c).sorted()
+                if (currentPeriod !in periods) continue
+                val start = periods.firstOrNull() ?: continue
+                val b = extractBuildingToken(c.optString("skdd", ""))
+                if (b.isBlank()) continue
+                if (start > bestStart) {
+                    bestStart = start
+                    best = b
+                }
+            }
+            if (best.isNotBlank()) return best
+        }
+
+        val cutoffExclusive = nextPeriod ?: Int.MAX_VALUE
         var bestP = -1
         var best = ""
         for (c in dayCourses) {
             val periods = parsePeriodsFromCourse(c).sorted()
-            val prev = periods.filter { it < targetPeriod }
+            val prev = periods.filter { it < cutoffExclusive }
             if (prev.isEmpty()) continue
             val p = prev.last()
             val b = extractBuildingToken(c.optString("skdd", ""))
