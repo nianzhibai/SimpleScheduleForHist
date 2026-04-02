@@ -1,11 +1,19 @@
 package com.cleankb.app.ui.theme
 
+import android.graphics.Color.TRANSPARENT
+import android.content.ContextWrapper
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalView
 import com.cleankb.app.ui.theme.ErrorGradient
 import com.cleankb.app.ui.theme.PrimaryGradient
 import com.cleankb.app.ui.theme.SecondaryGradient
@@ -124,6 +132,22 @@ fun CleanKbTheme(
         ThemeMode.DARK -> true
     }
     val colorScheme = if (darkTheme) DarkColors else LightColors
+    val view = LocalView.current
+
+    if (!view.isInEditMode) {
+        SideEffect {
+            view.context.findActivity()?.enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.auto(
+                    TRANSPARENT,
+                    TRANSPARENT
+                ),
+                navigationBarStyle = SystemBarStyle.auto(
+                    lightScrim = colorScheme.surface.copy(alpha = 0.92f).toArgb(),
+                    darkScrim = colorScheme.surface.copy(alpha = 0.92f).toArgb()
+                )
+            )
+        }
+    }
 
     MaterialTheme(
         colorScheme = colorScheme,
@@ -147,3 +171,9 @@ fun warningGradient(): List<Color> = WarningGradient
 
 @Composable
 fun errorGradient(): List<Color> = ErrorGradient
+
+private tailrec fun android.content.Context.findActivity(): ComponentActivity? = when (this) {
+    is ComponentActivity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}

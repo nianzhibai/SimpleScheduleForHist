@@ -2,6 +2,7 @@ package com.cleankb.app
 
 import android.content.Context
 import android.os.Bundle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,10 +34,15 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -110,6 +116,7 @@ import com.cleankb.app.ui.components.CompactCourseCard
 import com.cleankb.app.ui.components.EmptyState
 import com.cleankb.app.ui.components.EnhancedLoadingState
 import com.cleankb.app.ui.components.EnhancedWeatherCard
+import com.cleankb.app.ui.components.EnhancedFreeRoomTab
 import com.cleankb.app.ui.components.FreeRoomSkeletonLoading
 import com.cleankb.app.ui.components.HighlightCard
 import com.cleankb.app.ui.components.LoadingState
@@ -187,6 +194,7 @@ private enum class AppPage {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         setContent { CleanKbApp() }
     }
 }
@@ -460,10 +468,14 @@ private fun CleanKbApp() {
 
     // 主页面
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing.only(
+            WindowInsetsSides.Horizontal + WindowInsetsSides.Top
+        ),
         bottomBar = {
             AnimatedBottomNavigation(
                 selectedTab = selectedTab,
-                onTabSelected = { selectedTab = it }
+                onTabSelected = { selectedTab = it },
+                modifier = Modifier.navigationBarsPadding()
             )
         }
     ) { innerPadding ->
@@ -518,7 +530,7 @@ private fun CleanKbApp() {
                     when (currentTab) {
                         QueryTab.TODAY -> EnhancedTodayTab(todayData, isDark)
                         QueryTab.WEEK -> EnhancedWeekTab(weekData, isDark)
-                        QueryTab.FREE_ROOM -> FreeRoomTab(
+                        QueryTab.FREE_ROOM -> EnhancedFreeRoomTab(
                             data = freeRoomData,
                             selectedBuilding = selectedFreeRoomBuilding,
                             buildingOrder = freeRoomBuildingOrder,

@@ -1,16 +1,8 @@
 package com.cleankb.app.ui.components
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,68 +11,48 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DragHandle
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.SearchOff
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import com.cleankb.app.data.CampusService
-import com.cleankb.app.ui.theme.PrimaryGradient
 import com.cleankb.app.ui.theme.Radius
 import com.cleankb.app.ui.theme.Spacing
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun EnhancedFreeRoomTab(
     data: CampusService.FreeRoomSchedule?,
@@ -97,51 +69,41 @@ fun EnhancedFreeRoomTab(
         )
     }
 
-    var showReorderMode by remember { mutableStateOf(false) }
+    val recommendedKey = data.recommended?.let { "${it.building}-${it.room}" }
+    val remainingRooms = data.rooms
+        .filterNot { "${it.building}-${it.room}" == recommendedKey }
+        .take(12)
+
+    var showReorderPanel by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = Spacing.md),
+            .padding(horizontal = Spacing.sm),
         verticalArrangement = Arrangement.spacedBy(Spacing.md),
-        contentPadding = PaddingValues(bottom = Spacing.xxl)
+        contentPadding = PaddingValues(bottom = Spacing.xxxl)
     ) {
-        // 时间状态提示
         item {
-            TimeStatusCard(
-                currentWeek = data.currentWeek,
-                weekday = data.weekday,
-                season = data.season,
-                timeStatus = data.timeStatus,
-                targetPeriod = data.targetPeriod
+            FreeRoomOverviewCard(
+                data = data,
+                selectedBuilding = selectedBuilding
             )
         }
 
-        // 楼栋选择器
         item {
-            BuildingSelectorSection(
+            BuildingFilterCard(
                 anchorBuilding = data.anchorBuilding,
                 selectedBuilding = selectedBuilding,
                 buildingOrder = buildingOrder,
-                showReorderMode = showReorderMode,
+                showReorderPanel = showReorderPanel,
                 onBuildingSelect = onBuildingSelect,
-                onToggleReorderMode = { showReorderMode = !showReorderMode }
+                onToggleReorder = { showReorderPanel = !showReorderPanel }
             )
         }
 
-        // 拖动排序模式提示
-        if (showReorderMode) {
+        if (showReorderPanel) {
             item {
-                ReorderHintCard(
-                    onDismiss = { showReorderMode = false }
-                )
-            }
-        }
-
-        // 拖动排序列表
-        if (showReorderMode) {
-            item {
-                ReorderableBuildingList(
+                BuildingReorderCard(
                     buildingOrder = buildingOrder,
                     anchorBuilding = data.anchorBuilding,
                     onOrderChange = onBuildingOrderChange
@@ -149,150 +111,32 @@ fun EnhancedFreeRoomTab(
             }
         }
 
-        // 推荐教室
         item {
-            val r = data.recommended
-            if (r == null) {
-                val msg = if (selectedBuilding == null) {
-                    "当前没找到符合规则的空教室"
-                } else {
-                    "${selectedBuilding} 当前没有符合规则的空教室"
-                }
-                AppCard {
-                    AnimatedEmptyState(
-                        icon = Icons.Filled.SearchOff,
-                        title = msg,
-                        subtitle = "试试其他楼栋？"
-                    )
-                }
+            if (data.recommended == null) {
+                EmptyRecommendationCard(
+                    buildingLabel = selectedBuilding ?: data.anchorBuilding
+                )
             } else {
-                EnhancedRecommendedRoomCard(room = r)
+                RecommendedRoomCard(
+                    room = data.recommended,
+                    targetPeriod = data.targetPeriod
+                )
             }
         }
 
-        // 其他空教室列表
-        if (data.rooms.isNotEmpty()) {
+        if (remainingRooms.isNotEmpty()) {
             item {
-                SectionDivider(
-                    title = "其他可用教室",
-                    count = data.rooms.size
+                SectionHeader(
+                    title = "候选教室",
+                    subtitle = "按当前规则排序后的其他选择"
                 )
             }
 
-            val compactRooms = data.rooms.take(6)
-            items(compactRooms, key = { it.room }) { room ->
-                EnhancedRoomCard(room = room)
-            }
-        }
-    }
-}
-
-@Composable
-private fun TimeStatusCard(
-    currentWeek: String,
-    weekday: Int,
-    season: String,
-    timeStatus: String,
-    targetPeriod: Int
-) {
-    AppCard(
-        gradientColors = listOf(
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(Spacing.md),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Left accent bar
-                Box(
-                    modifier = Modifier
-                        .width(4.dp)
-                        .height(36.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    MaterialTheme.colorScheme.primary,
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-                                )
-                            )
-                        )
+            items(remainingRooms, key = { "${it.building}-${it.room}" }) { room ->
+                CandidateRoomCard(
+                    room = room,
+                    targetPeriod = data.targetPeriod
                 )
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = "第${currentWeek}周 · ${weekdayName(weekday)}",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = timeStatus,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Season badge with icon
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(Radius.sm))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
-                        .padding(horizontal = Spacing.sm, vertical = 4.dp)
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.WbSunny,
-                            contentDescription = null,
-                            modifier = Modifier.size(12.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = season,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-                // Period badge
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(Radius.sm))
-                        .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.12f))
-                        .padding(horizontal = Spacing.sm, vertical = 4.dp)
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.CalendarToday,
-                            contentDescription = null,
-                            modifier = Modifier.size(12.dp),
-                            tint = MaterialTheme.colorScheme.tertiary
-                        )
-                        Text(
-                            text = "第${targetPeriod}节",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.tertiary
-                        )
-                    }
-                }
             }
         }
     }
@@ -300,97 +144,156 @@ private fun TimeStatusCard(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun BuildingSelectorSection(
+private fun FreeRoomOverviewCard(
+    data: CampusService.FreeRoomSchedule,
+    selectedBuilding: String?
+) {
+    val focusBuilding = selectedBuilding ?: data.anchorBuilding
+
+    AppCard(
+        gradientColors = listOf(
+            MaterialTheme.colorScheme.surface,
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    Text(
+                        text = "空教室推荐",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "第${data.currentWeek}周 · ${weekdayName(data.weekday)} · ${data.timeStatus}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                PillTag(
+                    icon = Icons.Filled.AccessTime,
+                    text = "第${data.targetPeriod}节",
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                if (focusBuilding.isNotBlank()) {
+                    InfoChip(
+                        icon = Icons.Filled.LocationOn,
+                        label = "当前楼栋",
+                        value = focusBuilding
+                    )
+                }
+                InfoChip(
+                    icon = Icons.Filled.WbSunny,
+                    label = "作息",
+                    value = data.season
+                )
+                InfoChip(
+                    icon = Icons.Filled.AutoAwesome,
+                    label = "推荐数",
+                    value = "${data.rooms.size} 间"
+                )
+            }
+
+            SummaryStrip(
+                title = "你的空档",
+                value = formatPeriods(data.freePeriods),
+                accent = MaterialTheme.colorScheme.secondary
+            )
+            SummaryStrip(
+                title = "你的有课节次",
+                value = formatPeriods(data.busyPeriods),
+                accent = MaterialTheme.colorScheme.tertiary
+            )
+        }
+    }
+}
+
+@Composable
+private fun BuildingFilterCard(
     anchorBuilding: String,
     selectedBuilding: String?,
     buildingOrder: List<String>,
-    showReorderMode: Boolean,
+    showReorderPanel: Boolean,
     onBuildingSelect: (String?) -> Unit,
-    onToggleReorderMode: () -> Unit
+    onToggleReorder: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    AppCard {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
-            Text(
-                text = "选择楼栋",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-
             Row(
-                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-                verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(Radius.sm))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = ripple(),
-                        onClick = onToggleReorderMode
-                    )
-                    .padding(horizontal = Spacing.sm, vertical = 4.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.md),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Filled.DragHandle,
-                    contentDescription = null,
-                    modifier = Modifier.size(14.dp),
-                    tint = if (showReorderMode) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-                Text(
-                    text = if (showReorderMode) "完成排序" else "排序偏好",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (showReorderMode) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-            }
-        }
-
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-        ) {
-            val displayBuildings = buildingOrder.take(8)
-            displayBuildings.forEach { building ->
-                val isSelected = if (building == anchorBuilding) {
-                    selectedBuilding == null || selectedBuilding == anchorBuilding
-                } else {
-                    selectedBuilding == building
-                }
-
-                BuildingFilterChip(
-                    label = building,
-                    isAnchor = building == anchorBuilding,
-                    isSelected = isSelected,
-                    onClick = {
-                        if (building == anchorBuilding) {
-                            onBuildingSelect(null)
-                        } else {
-                            onBuildingSelect(building)
-                        }
-                    }
-                )
-            }
-
-            if (buildingOrder.size > 8) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(Radius.full))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(horizontal = Spacing.md, vertical = 8.dp)
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = "+${buildingOrder.size - 8}",
-                        style = MaterialTheme.typography.labelMedium,
+                        text = "楼栋筛选",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "先看常用楼栋，再切换排序偏好",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                TertiaryActionChip(
+                    icon = Icons.AutoMirrored.Filled.Sort,
+                    text = if (showReorderPanel) "收起排序" else "调整排序",
+                    onClick = onToggleReorder
+                )
+            }
+
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = Spacing.md),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                item {
+                    BuildingPill(
+                        label = if (anchorBuilding.isBlank()) "智能推荐" else "最近楼栋",
+                        supporting = if (anchorBuilding.isBlank()) "按规则推荐" else anchorBuilding,
+                        selected = selectedBuilding == null,
+                        highlighted = true,
+                        onClick = { onBuildingSelect(null) }
+                    )
+                }
+
+                items(buildingOrder, key = { it }) { building ->
+                    BuildingPill(
+                        label = building,
+                        supporting = if (building == anchorBuilding) "当前最近" else "手动筛选",
+                        selected = selectedBuilding == building,
+                        highlighted = building == anchorBuilding,
+                        onClick = { onBuildingSelect(building) }
                     )
                 }
             }
@@ -399,229 +302,133 @@ private fun BuildingSelectorSection(
 }
 
 @Composable
-private fun BuildingFilterChip(
+private fun BuildingPill(
     label: String,
-    isAnchor: Boolean,
-    isSelected: Boolean,
+    supporting: String,
+    selected: Boolean,
+    highlighted: Boolean,
     onClick: () -> Unit
 ) {
-    val backgroundColor by animateColorAsState(
-        targetValue = when {
-            isSelected && isAnchor -> MaterialTheme.colorScheme.primary
-            isSelected -> MaterialTheme.colorScheme.primaryContainer
-            else -> MaterialTheme.colorScheme.surfaceVariant
-        },
-        animationSpec = tween(200),
-        label = "chipBg"
-    )
-
-    val textColor by animateColorAsState(
-        targetValue = when {
-            isSelected && isAnchor -> MaterialTheme.colorScheme.onPrimary
-            isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
-            else -> MaterialTheme.colorScheme.onSurfaceVariant
-        },
-        animationSpec = tween(200),
-        label = "chipText"
-    )
-
-    val elevation by animateDpAsState(
-        targetValue = if (isSelected) 4.dp else 0.dp,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "chipElevation"
-    )
+    val containerColor = when {
+        selected -> MaterialTheme.colorScheme.primary
+        highlighted -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    }
+    val contentColor = when {
+        selected -> MaterialTheme.colorScheme.onPrimary
+        highlighted -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.onSurface
+    }
 
     Box(
         modifier = Modifier
-            .shadow(elevation, RoundedCornerShape(Radius.full))
-            .then(
-                if (isSelected) {
-                    Modifier.border(
-                        width = 1.5.dp,
-                        brush = Brush.horizontalGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                            )
-                        ),
-                        shape = RoundedCornerShape(Radius.full)
-                    )
-                } else Modifier
+            .clip(RoundedCornerShape(Radius.lg))
+            .background(containerColor)
+            .border(
+                width = if (selected) 0.dp else 1.dp,
+                color = if (highlighted) {
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                } else {
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                },
+                shape = RoundedCornerShape(Radius.lg)
             )
-            .clip(RoundedCornerShape(Radius.full))
-            .background(backgroundColor)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(),
                 onClick = onClick
             )
-            .padding(horizontal = Spacing.md, vertical = 8.dp)
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm)
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            if (isAnchor) {
-                Icon(
-                    imageVector = Icons.Filled.LocationOn,
-                    contentDescription = "最近楼栋",
-                    modifier = Modifier.size(12.dp),
-                    tint = textColor
-                )
-            }
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                color = textColor
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = contentColor
+            )
+            Text(
+                text = supporting,
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor.copy(alpha = 0.72f)
             )
         }
     }
 }
 
 @Composable
-private fun ReorderHintCard(onDismiss: () -> Unit) {
-    AppCard(
-        gradientColors = listOf(
-            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
-            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.3f)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(Spacing.md),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.TouchApp,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-                Text(
-                    text = "长按并拖动楼栋名称调整顺序",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-            }
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription = "关闭提示",
-                modifier = Modifier
-                    .size(20.dp)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = ripple(),
-                        onClick = onDismiss
-                    ),
-                tint = MaterialTheme.colorScheme.onTertiaryContainer
-            )
-        }
-    }
-}
-
-@Composable
-private fun ReorderableBuildingList(
+private fun BuildingReorderCard(
     buildingOrder: List<String>,
     anchorBuilding: String,
     onOrderChange: (List<String>) -> Unit
 ) {
-    val haptic = LocalHapticFeedback.current
-    var draggingKey by remember { mutableStateOf<String?>(null) }
+    AppCard(
+        gradientColors = listOf(
+            MaterialTheme.colorScheme.surface,
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Text(
+                text = "楼栋排序",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "优先级越靠前，推荐时权重越高。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-    AppCard {
-        Column(modifier = Modifier.fillMaxWidth()) {
             buildingOrder.forEachIndexed { index, building ->
-                val isDragging = draggingKey == building
-                val isAnchor = building == anchorBuilding
-
-                ReorderableBuildingItem(
-                    building = building,
+                ReorderRow(
                     index = index,
-                    isAnchor = isAnchor,
-                    isDragging = isDragging,
-                    onDragStart = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        draggingKey = building
-                    },
-                    onDragEnd = { draggingKey = null },
+                    building = building,
+                    isAnchor = building == anchorBuilding,
+                    canMoveUp = index > 0,
+                    canMoveDown = index < buildingOrder.lastIndex,
                     onMoveUp = {
-                        if (index > 0) {
-                            val newOrder = buildingOrder.toMutableList()
-                            val item = newOrder.removeAt(index)
-                            newOrder.add(index - 1, item)
-                            onOrderChange(newOrder)
-                        }
+                        if (index == 0) return@ReorderRow
+                        val next = buildingOrder.toMutableList()
+                        val item = next.removeAt(index)
+                        next.add(index - 1, item)
+                        onOrderChange(next)
                     },
                     onMoveDown = {
-                        if (index < buildingOrder.size - 1) {
-                            val newOrder = buildingOrder.toMutableList()
-                            val item = newOrder.removeAt(index)
-                            newOrder.add(index + 1, item)
-                            onOrderChange(newOrder)
-                        }
+                        if (index == buildingOrder.lastIndex) return@ReorderRow
+                        val next = buildingOrder.toMutableList()
+                        val item = next.removeAt(index)
+                        next.add(index + 1, item)
+                        onOrderChange(next)
                     }
                 )
-
-                if (index < buildingOrder.size - 1) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                }
             }
         }
     }
 }
 
 @Composable
-private fun ReorderableBuildingItem(
-    building: String,
+private fun ReorderRow(
     index: Int,
+    building: String,
     isAnchor: Boolean,
-    isDragging: Boolean,
-    onDragStart: () -> Unit,
-    onDragEnd: () -> Unit,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit
 ) {
-    val elevation by animateDpAsState(
-        targetValue = if (isDragging) 8.dp else 0.dp,
-        label = "itemElevation"
-    )
-
-    val scale by animateFloatAsState(
-        targetValue = if (isDragging) 1.02f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
-        ),
-        label = "itemScale"
-    )
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .zIndex(if (isDragging) 1f else 0f)
-            .shadow(elevation, RoundedCornerShape(Radius.sm))
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .background(
-                if (isDragging) {
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                } else {
-                    MaterialTheme.colorScheme.surface
-                }
-            )
+            .clip(RoundedCornerShape(Radius.md))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
             .padding(horizontal = Spacing.md, vertical = Spacing.sm),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -631,356 +438,506 @@ private fun ReorderableBuildingItem(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.weight(1f)
         ) {
-            Text(
-                text = "${index + 1}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.width(20.dp)
-            )
-
-            if (isAnchor) {
-                Icon(
-                    imageVector = Icons.Filled.LocationOn,
-                    contentDescription = "最近楼栋",
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "${index + 1}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 
-            Text(
-                text = building,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isAnchor) FontWeight.SemiBold else FontWeight.Normal
-            )
+            Column {
+                Text(
+                    text = building,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = if (isAnchor) "当前最近楼栋" else "手动优先级",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(Radius.sm))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = ripple(),
-                        onClick = onMoveUp
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.ArrowDropDown,
-                    contentDescription = "上移",
-                    modifier = Modifier
-                        .size(20.dp)
-                        .graphicsLayer { rotationZ = 180f },
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(Radius.sm))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = ripple(),
-                        onClick = onMoveDown
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.ArrowDropDown,
-                    contentDescription = "下移",
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(Radius.sm))
-                    .pointerInput(building) {
-                        detectDragGesturesAfterLongPress(
-                            onDragStart = { onDragStart() },
-                            onDragEnd = { onDragEnd() },
-                            onDragCancel = { onDragEnd() },
-                            onDrag = { _, _ -> }
-                        )
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.DragHandle,
-                    contentDescription = "拖动排序",
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+            SmallActionButton(
+                icon = Icons.Filled.ArrowUpward,
+                enabled = canMoveUp,
+                contentDescription = "上移",
+                onClick = onMoveUp
+            )
+            SmallActionButton(
+                icon = Icons.Filled.ArrowDownward,
+                enabled = canMoveDown,
+                contentDescription = "下移",
+                onClick = onMoveDown
+            )
         }
     }
 }
 
 @Composable
-private fun EnhancedRecommendedRoomCard(room: CampusService.FreeRoomItem) {
-    val elevation by animateDpAsState(
-        targetValue = 6.dp,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "cardElevation"
-    )
+private fun SmallActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(RoundedCornerShape(Radius.sm))
+            .background(
+                if (enabled) {
+                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                }
+            )
+            .clickable(
+                enabled = enabled,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(),
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(16.dp),
+            tint = if (enabled) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+            }
+        )
+    }
+}
+
+@Composable
+private fun EmptyRecommendationCard(buildingLabel: String) {
+    AppCard {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.lg),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.SearchOff,
+                contentDescription = null,
+                modifier = Modifier.size(32.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+            )
+            Text(
+                text = if (buildingLabel.isBlank()) "当前没找到符合规则的空教室" else "$buildingLabel 暂时没有合适空教室",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "换一个楼栋，或者等下一节再查。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RecommendedRoomCard(
+    room: CampusService.FreeRoomItem,
+    targetPeriod: Int
+) {
+    val tone = availabilityTone(room.runLength)
 
     AppCard(
-        modifier = Modifier.shadow(
-            elevation = elevation,
-            shape = RoundedCornerShape(Radius.lg),
-            spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-        ),
         gradientColors = listOf(
-            MaterialTheme.colorScheme.primaryContainer,
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
+            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.52f)
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            verticalArrangement = Arrangement.spacedBy(Spacing.md)
         ) {
-            // Header row with badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Star,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "推荐教室",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
-                // Availability indicator
-                val periodCount = room.freePeriods.size
-                val availabilityColor = when {
-                    periodCount >= 4 -> MaterialTheme.colorScheme.tertiary
-                    periodCount >= 2 -> MaterialTheme.colorScheme.secondary
-                    else -> MaterialTheme.colorScheme.error
-                }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(Radius.sm))
-                        .background(availabilityColor.copy(alpha = 0.15f))
-                        .padding(horizontal = Spacing.sm, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "${periodCount}节空闲",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = availabilityColor,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-            }
-
-            // Main content
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
                     Text(
+                        text = "推荐教室",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
                         text = room.room,
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
+
                     val compactBuilding = compactFreeRoomBuilding(room.room, room.building)
                     if (compactBuilding.isNotBlank()) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Home,
-                                contentDescription = null,
-                                modifier = Modifier.size(14.dp),
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
-                            )
-                            Text(
-                                text = compactBuilding,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                            )
-                        }
+                        Text(
+                            text = compactBuilding,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
+                        )
                     }
                 }
 
-                FreePeriodsBlock(periods = room.freePeriods)
+                PillTag(
+                    icon = Icons.Filled.AutoAwesome,
+                    text = tone.label,
+                    containerColor = tone.container,
+                    contentColor = tone.content
+                )
             }
+
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                InfoChip(
+                    icon = Icons.Filled.AccessTime,
+                    label = "起始节次",
+                    value = "第${room.startPeriod}节"
+                )
+                InfoChip(
+                    icon = Icons.Filled.Tune,
+                    label = "连续空闲",
+                    value = "${room.runLength} 节"
+                )
+                InfoChip(
+                    icon = Icons.Filled.MeetingRoom,
+                    label = "容量",
+                    value = "${room.capacity} 人"
+                )
+            }
+
+            SummaryStrip(
+                title = if (room.startPeriod == targetPeriod) "现在可去" else "建议等待",
+                value = if (room.startPeriod == targetPeriod) {
+                    "当前就可以使用，连续空闲 ${room.runLength} 节"
+                } else {
+                    "从第${room.startPeriod}节开始空出，连续 ${room.runLength} 节"
+                },
+                accent = tone.content
+            )
+
+            PeriodFlow(periods = room.freePeriods)
         }
     }
 }
 
 @Composable
-private fun EnhancedRoomCard(room: CampusService.FreeRoomItem) {
-    val isPressed = remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed.value) 0.98f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "cardScale"
-    )
+private fun CandidateRoomCard(
+    room: CampusService.FreeRoomItem,
+    targetPeriod: Int
+) {
+    val tone = availabilityTone(room.runLength)
 
-    AppCard(
-        modifier = Modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-    ) {
-        Row(
+    AppCard {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(Spacing.md),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Text(
-                        text = room.room,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    // Availability dots
-                    val periodCount = room.freePeriods.size
-                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        repeat(minOf(periodCount, 3)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(6.dp)
-                                    .clip(RoundedCornerShape(3.dp))
-                                    .background(
-                                        when {
-                                            periodCount >= 4 -> MaterialTheme.colorScheme.tertiary
-                                            periodCount >= 2 -> MaterialTheme.colorScheme.secondary
-                                            else -> MaterialTheme.colorScheme.error
-                                        }
-                                    )
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(Radius.md))
+                            .background(tone.container),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.MeetingRoom,
+                            contentDescription = null,
+                            tint = tone.content
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = room.room,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        val compactBuilding = compactFreeRoomBuilding(room.room, room.building)
+                        if (compactBuilding.isNotBlank()) {
+                            Text(
+                                text = compactBuilding,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
                 }
-                val compactBuilding = compactFreeRoomBuilding(room.room, room.building)
-                if (compactBuilding.isNotBlank()) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.LocationOn,
-                            contentDescription = null,
-                            modifier = Modifier.size(12.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
-                        Text(
-                            text = compactBuilding,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = if (room.startPeriod == targetPeriod) "现在可用" else "第${room.startPeriod}节可用",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = tone.content,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "连续 ${room.runLength} 节",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
-            FreePeriodsBadges(periods = room.freePeriods)
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "容量 ${room.capacity} 人",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = formatPeriods(room.freePeriods),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun FreePeriodsBlock(periods: List<Int>) {
-    Column(
-        modifier = Modifier.width(80.dp),
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+private fun TertiaryActionChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(Radius.full))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple(),
+                onClick = onClick
+            )
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun PillTag(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    containerColor: Color,
+    contentColor: Color
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(Radius.full))
+            .background(containerColor)
+            .padding(horizontal = Spacing.sm, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(14.dp),
+            tint = contentColor
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = contentColor,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+private fun InfoChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(Radius.md))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.88f))
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+                shape = RoundedCornerShape(Radius.md)
+            )
+            .padding(horizontal = Spacing.sm, vertical = Spacing.sm),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        Column {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun SummaryStrip(
+    title: String,
+    value: String,
+    accent: Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(Radius.md))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = "空闲节次",
-            style = MaterialTheme.typography.labelSmall,
+            text = title,
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-            text = formatPeriods(periods),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.End,
-            modifier = Modifier.fillMaxWidth()
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = accent,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FreePeriodsBadges(periods: List<Int>) {
+private fun PeriodFlow(periods: List<Int>) {
     FlowRow(
-        modifier = Modifier.width(100.dp),
-        horizontalArrangement = Arrangement.End,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        maxItemsInEachRow = 3
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs)
     ) {
-        periods.take(5).forEach { period ->
-            val (bgColor, textColor) = getPeriodColors(period)
+        periods.forEach { period ->
+            val (container, content) = getPeriodColors(period)
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(Radius.xs))
-                    .background(bgColor)
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .clip(RoundedCornerShape(Radius.full))
+                    .background(container)
+                    .padding(horizontal = Spacing.sm, vertical = 6.dp)
             ) {
                 Text(
-                    text = "$period",
+                    text = "第${period}节",
                     style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = textColor
+                    color = content,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }
-        if (periods.size > 5) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(Radius.xs))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    text = "+${periods.size - 5}",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+    }
+}
+
+private data class AvailabilityTone(
+    val label: String,
+    val container: Color,
+    val content: Color
+)
+
+@Composable
+private fun availabilityTone(runLength: Int): AvailabilityTone {
+    return when {
+        runLength >= 4 -> AvailabilityTone(
+            label = "超稳",
+            container = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.16f),
+            content = MaterialTheme.colorScheme.tertiary
+        )
+        runLength >= 2 -> AvailabilityTone(
+            label = "可冲",
+            container = MaterialTheme.colorScheme.secondary.copy(alpha = 0.16f),
+            content = MaterialTheme.colorScheme.secondary
+        )
+        else -> AvailabilityTone(
+            label = "短暂",
+            container = MaterialTheme.colorScheme.error.copy(alpha = 0.14f),
+            content = MaterialTheme.colorScheme.error
+        )
     }
 }
 
@@ -1045,47 +1002,4 @@ private fun compactFreeRoomBuilding(room: String, building: String): String {
         }
     }
     return compact
-}
-
-@Composable
-private fun SectionDivider(title: String, count: Int) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = Spacing.sm),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Left accent line
-            Box(
-                modifier = Modifier
-                    .width(3.dp)
-                    .height(16.dp)
-                    .clip(RoundedCornerShape(1.5.dp))
-                    .background(MaterialTheme.colorScheme.primary)
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(Radius.full))
-                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
-                .padding(horizontal = Spacing.sm, vertical = 2.dp)
-        ) {
-            Text(
-                text = "$count 间",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                fontWeight = FontWeight.Medium
-            )
-        }
-    }
 }
