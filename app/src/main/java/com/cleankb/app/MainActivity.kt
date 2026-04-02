@@ -645,43 +645,46 @@ private fun WeatherCard(
                     )
                 }
                 data != null -> {
-                    // 温度 + 天气详情
+                    // 温度行：当前温度 + 体感 | 温度范围
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "${fmtTemp(data.currentTempC)}°",
-                            style = MaterialTheme.typography.displayMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Column(
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        Row(
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                         ) {
                             Text(
-                                text = "${fmtTemp(data.minTempC)}° ~ ${fmtTemp(data.maxTempC)}°",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "${fmtTemp(data.currentTempC)}°",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = "风速 ${fmtNum(data.windSpeedMps)}m/s",
+                                text = "${data.currentWeatherText} 体感${fmtTemp(data.feelTempC)}°",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        Text(
+                            text = "${fmtTemp(data.minTempC)}°~${fmtTemp(data.maxTempC)}°",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
 
-                    // 天气提醒
-                    Text(
-                        text = data.reminder,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    // 提醒文案：只显示一条关键提示
+                    val tip = data.extraTips.firstOrNull() ?: data.reminder
+                    if (tip.isNotBlank()) {
+                        Text(
+                            text = tip,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
                 else -> {
                     Row(

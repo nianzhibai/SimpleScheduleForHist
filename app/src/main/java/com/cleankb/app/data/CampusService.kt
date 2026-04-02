@@ -11,11 +11,13 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.math.ceil
+import kotlin.math.pow
 
 class CampusService {
 
@@ -90,6 +92,12 @@ class CampusService {
         val sunrise: String,
         val sunset: String,
         val windSpeedMps: Double,
+        val todayWeatherText: String,
+        val currentWeatherText: String,
+        val feelTempC: Double,
+        val temperatureLevel: String,
+        val coreAdvice: String,
+        val extraTips: List<String>,
         val reminder: String,
     )
 
@@ -128,6 +136,39 @@ class CampusService {
         val status: String,
     )
 
+    private data class WeatherReport(
+        val date: LocalDate,
+        val minTempC: Double,
+        val maxTempC: Double,
+        val currentTempC: Double,
+        val todayWeatherCode: String,
+        val todayWeatherText: String,
+        val currentWeatherCode: String,
+        val currentWeatherText: String,
+        val rainSlots: List<String>,
+        val firstRainLocalDateTime: String?,
+        val firstRainLocalTime: String?,
+        val windSpeedKmh: Double,
+        val windSpeedMps: Double,
+        val humidity: Double, // 相对湿度 0~1
+        val sunrise: String,
+        val sunset: String,
+    )
+
+    private data class DressingAdvice(
+        val feelTempC: Double,
+        val temperatureLevel: String,
+        val coreAdvice: String,
+        val extraTips: List<String>,
+        val summary: String,
+    )
+
+    private data class TempLayerRule(
+        val upperCelsius: Double,
+        val label: String,
+        val advice: String,
+    )
+
     private val cacheLock = Any()
     private val detailCacheTtlMs = 5 * 60 * 1000L
     private var jxlListCacheAt: Long = 0L
@@ -154,6 +195,77 @@ class CampusService {
         "https://api.caiyunapp.com/v2/<t1>/113.94,35.28/forecast?dailysteps=1&alert=true"
     private val rainThresholdMm = 0.0
     private val rainPeriodOrder = listOf("凌晨", "早上", "中午", "下午", "晚上")
+    private val windSpeedUnitLabel = mapOf(
+        "metric" to "km/h",
+        "metric:v1" to "km/h",
+        "metric:v2" to "km/h",
+        "imperial" to "mi/h",
+        "si" to "m/s",
+    )
+    private val temperatureUnitLabel = mapOf(
+        "si" to "kelvin",
+        "imperial" to "fahrenheit",
+        "metric" to "celsius",
+        "metric:v1" to "celsius",
+        "metric:v2" to "celsius",
+    )
+    private val skyconZh = mapOf(
+        "CLEAR_DAY" to "晴",
+        "CLEAR_NIGHT" to "晴",
+        "PARTLY_CLOUDY_DAY" to "多云",
+        "PARTLY_CLOUDY_NIGHT" to "多云",
+        "CLOUDY" to "阴",
+        "LIGHT_HAZE" to "轻度雾霾",
+        "MODERATE_HAZE" to "中度雾霾",
+        "HEAVY_HAZE" to "重度雾霾",
+        "LIGHT_RAIN" to "小雨",
+        "MODERATE_RAIN" to "中雨",
+        "HEAVY_RAIN" to "大雨",
+        "STORM_RAIN" to "暴雨",
+        "FOG" to "雾",
+        "LIGHT_SNOW" to "小雪",
+        "MODERATE_SNOW" to "中雪",
+        "HEAVY_SNOW" to "大雪",
+        "STORM_SNOW" to "暴雪",
+        "DUST" to "浮尘",
+        "SAND" to "沙尘",
+        "WIND" to "大风",
+        "THUNDER_SHOWER" to "雷阵雨",
+        "HAIL" to "冰雹",
+        "RAIN_WITH_SNOW" to "雨夹雪",
+    )
+    private val tempLayers = listOf(
+        TempLayerRule(-10.0, "极寒", "羽绒服+厚毛衣+保暖内衣，戴帽子手套围巾，穿雪地靴"),
+        TempLayerRule(0.0, "严寒", "厚羽绒服+毛衣+保暖内衣，戴围巾手套，穿厚底防滑鞋"),
+        TempLayerRule(5.0, "寒冷", "羽绒服或厚棉服+毛衣+打底衫，可戴围巾"),
+        TempLayerRule(10.0, "较冷", "厚外套+针织衫+长裤，注意保暖"),
+        TempLayerRule(15.0, "凉爽", "轻薄外套+长袖上衣+长裤"),
+        TempLayerRule(20.0, "舒适偏凉", "薄外套或厚长袖+长裤，早晚带一件外套"),
+        TempLayerRule(25.0, "舒适", "薄长袖或T恤+长裤，轻薄舒适即可"),
+        TempLayerRule(30.0, "温热", "透气T恤+薄款长裤或七分裤，选速干面料"),
+        TempLayerRule(35.0, "炎热", "短袖短裤或裙，浅色透气，注意防晒"),
+        TempLayerRule(Double.POSITIVE_INFINITY, "酷暑", "最轻薄的衣物，防晒衫或遮阳帽必备，户外尽量避开正午"),
+    )
+    private val skyconExtraTips = mapOf(
+        "LIGHT_RAIN" to "有小雨，带折叠伞。",
+        "MODERATE_RAIN" to "中雨，务必带雨伞，鞋子选防水款。",
+        "HEAVY_RAIN" to "大雨，带大伞或雨衣，尽量减少外出。",
+        "STORM_RAIN" to "暴雨，非必要不出行，出行穿雨衣带大伞。",
+        "THUNDER_SHOWER" to "雷阵雨，注意安全，带雨具。",
+        "LIGHT_SNOW" to "小雪，防滑保暖鞋，路面注意。",
+        "MODERATE_SNOW" to "中雪，防滑靴，出行谨慎。",
+        "HEAVY_SNOW" to "大雪，保暖防滑全套，非必要减少外出。",
+        "STORM_SNOW" to "暴雪，强烈建议留室内。",
+        "RAIN_WITH_SNOW" to "雨夹雪，防水防滑，路面湿滑。",
+        "HAIL" to "冰雹，尽量室内等待。",
+        "LIGHT_HAZE" to "轻度雾霾，敏感人群戴口罩。",
+        "MODERATE_HAZE" to "中度雾霾，建议戴 N95。",
+        "HEAVY_HAZE" to "重度雾霾，尽量不外出，外出戴 N95。",
+        "FOG" to "有雾，能见度低，开车减速。",
+        "DUST" to "浮尘，戴口罩保护呼吸道。",
+        "SAND" to "沙尘，戴口罩加护目镜。",
+        "WIND" to "大风，外出注意固定随身物品。",
+    )
 
     private fun normalizeApiUrl(serviceUrl: String): String {
         return serviceUrl.trim().removeSuffix("/") + "/wap/wapController.jsp"
@@ -466,14 +578,59 @@ class CampusService {
             timeoutMs = 12_000
         )
         val obj = JSONObject(weatherBody)
-        return if (obj.has("rain_today")) {
-            extractProvidedSummary(obj)
-        } else {
-            extractCaiyunSummary(obj)
+        return when {
+            obj.has("weather") -> extractCombinedWeatherSummary(obj)
+            obj.has("rain_today") -> extractLegacyProvidedSummary(obj)
+            else -> extractCaiyunSummary(obj)
         }
     }
 
-    private fun extractProvidedSummary(j: JSONObject): WeatherSummary {
+    private fun extractCombinedWeatherSummary(root: JSONObject): WeatherSummary {
+        val weather = root.optJSONObject("weather") ?: error("天气汇总缺少 weather")
+        val dressing = root.optJSONObject("dressing_advice")
+        val date = LocalDate.parse(weather.optString("date", LocalDate.now().toString()))
+        val tempRange = weather.optJSONObject("temperature_range")
+        val minTemp = tempRange?.optDouble("min_celsius", 0.0) ?: 0.0
+        val maxTemp = tempRange?.optDouble("max_celsius", 0.0) ?: 0.0
+        val currentTemp = weather.optDouble("current_temperature_celsius", 0.0)
+        val windKmh = weather.optDouble("current_wind_speed_kmh", 0.0)
+        val todayWeather = weather.optJSONObject("today_weather")
+        val currentWeather = weather.optJSONObject("current_weather")
+        val rain = weather.optJSONObject("rain")
+        val rainToday = rain?.optBoolean("expected", false) ?: false
+        val firstRainDateTime = rain?.optString("first_rain_local_datetime", "")?.trim().orEmpty().ifBlank { null }
+        val firstRainTime = rain?.optString("first_rain_local_time", "")?.trim().orEmpty().ifBlank { null }
+        val rainPeriods = rainPeriodsFromRange(firstRainDateTime, firstRainDateTime)
+        val extraTips = dressing?.optJSONArray("extra_tips").toStringList()
+        val summary = dressing?.optString("summary", "")?.trim().orEmpty()
+        val feelTemp = dressing?.optDouble("feel_temperature_celsius", currentTemp) ?: currentTemp
+        val level = dressing?.optString("temperature_level", "")?.trim().orEmpty()
+        val coreAdvice = dressing?.optString("core_advice", "")?.trim().orEmpty()
+
+        return WeatherSummary(
+            title = "新乡 · 河南科技学院",
+            date = date,
+            rainToday = rainToday,
+            rainStart = firstRainDateTime,
+            rainEnd = firstRainDateTime,
+            rainPeriodText = formatRainPeriods(rainPeriods),
+            minTempC = minTemp,
+            maxTempC = maxTemp,
+            currentTempC = currentTemp,
+            sunrise = weather.optString("sunrise_local", "--:--").trim().ifBlank { "--:--" },
+            sunset = weather.optString("sunset_local", "--:--").trim().ifBlank { "--:--" },
+            windSpeedMps = kmhToMps(windKmh),
+            todayWeatherText = todayWeather?.optString("description", "未知").orEmpty().ifBlank { "未知" },
+            currentWeatherText = currentWeather?.optString("description", "未知").orEmpty().ifBlank { "未知" },
+            feelTempC = feelTemp,
+            temperatureLevel = level,
+            coreAdvice = coreAdvice,
+            extraTips = extraTips,
+            reminder = buildReminder(summary, coreAdvice, extraTips)
+        )
+    }
+
+    private fun extractLegacyProvidedSummary(j: JSONObject): WeatherSummary {
         if (!j.has("rain_today")) {
             error("天气接口未返回 rain_today，请确认目标接口返回的是你提供的汇总格式")
         }
@@ -496,11 +653,36 @@ class CampusService {
         val windObj = j.optJSONObject("current_wind_speed")
         val windRaw = windObj?.optDouble("value", 0.0) ?: 0.0
         val windUnit = windObj?.optString("unit", "m/s").orEmpty().lowercase()
-        val wind = if (windUnit == "km/h") kmhToMps(windRaw) else windRaw
+        val wind = when (windUnit) {
+            "km/h" -> kmhToMps(windRaw)
+            "mi/h", "mph" -> windRaw * 0.44704
+            else -> windRaw
+        }
         val sunrise = j.optJSONObject("sunrise")?.optString("value", "--:--").orEmpty()
         val sunset = j.optJSONObject("sunset")?.optString("value", "--:--").orEmpty()
         val rainPeriods = rainPeriodsFromRange(rainStart, rainEnd)
-        val reminder = buildWeatherReminder(rainPeriods, maxTemp, minTemp, wind)
+        // 尝试获取湿度，没有则默认0.5
+        val humidity = j.optJSONObject("humidity")?.optDouble("value", 0.5) ?: 0.5
+
+        val report = WeatherReport(
+            date = date,
+            minTempC = minTemp,
+            maxTempC = maxTemp,
+            currentTempC = currentTemp,
+            todayWeatherCode = "",
+            todayWeatherText = if (rainToday) "有雨" else "未知",
+            currentWeatherCode = "",
+            currentWeatherText = if (rainToday) "有雨" else "未知",
+            rainSlots = listOfNotNull(rainStart, rainEnd),
+            firstRainLocalDateTime = rainStart,
+            firstRainLocalTime = rainStart?.let(::trimToHm)?.takeIf { it != "--:--" },
+            windSpeedKmh = wind * 3.6,
+            windSpeedMps = wind,
+            humidity = humidity,
+            sunrise = sunrise,
+            sunset = sunset,
+        )
+        val dressing = buildDressingAdvice(report)
 
         return WeatherSummary(
             title = "新乡 · 河南科技学院",
@@ -515,7 +697,13 @@ class CampusService {
             sunrise = sunrise,
             sunset = sunset,
             windSpeedMps = wind,
-            reminder = reminder
+            todayWeatherText = report.todayWeatherText,
+            currentWeatherText = report.currentWeatherText,
+            feelTempC = dressing.feelTempC,
+            temperatureLevel = dressing.temperatureLevel,
+            coreAdvice = dressing.coreAdvice,
+            extraTips = dressing.extraTips,
+            reminder = buildReminder(dressing.summary, dressing.coreAdvice, dressing.extraTips)
         )
     }
 
@@ -539,6 +727,32 @@ class CampusService {
     }
 
     private fun extractCaiyunSummary(weatherJson: JSONObject): WeatherSummary {
+        val report = buildWeatherReport(weatherJson)
+        val dressing = buildDressingAdvice(report)
+        return WeatherSummary(
+            title = "新乡 · 河南科技学院",
+            date = report.date,
+            rainToday = report.rainSlots.isNotEmpty(),
+            rainStart = report.firstRainLocalDateTime,
+            rainEnd = report.rainSlots.lastOrNull(),
+            rainPeriodText = formatRainPeriods(rainPeriodsFromSlots(report.rainSlots)),
+            minTempC = report.minTempC,
+            maxTempC = report.maxTempC,
+            currentTempC = report.currentTempC,
+            sunrise = report.sunrise,
+            sunset = report.sunset,
+            windSpeedMps = report.windSpeedMps,
+            todayWeatherText = report.todayWeatherText,
+            currentWeatherText = report.currentWeatherText,
+            feelTempC = dressing.feelTempC,
+            temperatureLevel = dressing.temperatureLevel,
+            coreAdvice = dressing.coreAdvice,
+            extraTips = dressing.extraTips,
+            reminder = buildReminder(dressing.summary, dressing.coreAdvice, dressing.extraTips)
+        )
+    }
+
+    private fun buildWeatherReport(weatherJson: JSONObject): WeatherReport {
         val result = weatherJson.optJSONObject("result") ?: error("天气数据缺少 result")
         val hourly = result.optJSONObject("hourly") ?: error("天气数据缺少 hourly")
         val daily = result.optJSONObject("daily") ?: error("天气数据缺少 daily")
@@ -546,16 +760,22 @@ class CampusService {
         val dateText = dailyTemp.optString("date", "").trim()
         val date = LocalDate.parse(dateText)
         val hi = closestHourlyIndex(hourly, dateText)
-        val nowTemp = hourly.optJSONArray("temperature")?.optJSONObject(hi)?.optDouble("value", Double.NaN) ?: Double.NaN
-        val windKmh = hourly.optJSONArray("wind")?.optJSONObject(hi)?.optDouble("speed", 0.0) ?: 0.0
-        val wind = kmhToMps(windKmh)
+        val apiUnit = weatherJson.optString("unit", "metric").trim().lowercase().ifBlank { "metric" }
+        val windUnit = windSpeedUnitLabel[apiUnit] ?: "km/h"
+        val tempUnit = temperatureUnitLabel[apiUnit] ?: "celsius"
+        val nowTempRaw = hourly.optJSONArray("temperature")?.optJSONObject(hi)?.optDouble("value", Double.NaN) ?: Double.NaN
+        val windRaw = hourly.optJSONArray("wind")?.optJSONObject(hi)?.optDouble("speed", 0.0) ?: 0.0
+        val nowTemp = convertTemperatureToCelsius(nowTempRaw, tempUnit)
+        val wind = convertWindSpeedToMps(windRaw, windUnit)
         if (nowTemp.isNaN()) error("天气数据缺少当前温度")
-        val minTemp = dailyTemp.optDouble("min", 0.0)
-        val maxTemp = dailyTemp.optDouble("max", 0.0)
+        val minTemp = convertTemperatureToCelsius(dailyTemp.optDouble("min", 0.0), tempUnit)
+        val maxTemp = convertTemperatureToCelsius(dailyTemp.optDouble("max", 0.0), tempUnit)
 
         val astro = daily.optJSONArray("astro")?.optJSONObject(0)
         val sunrise = trimToHm(astro?.optJSONObject("sunrise")?.optString("time", "").orEmpty())
         val sunset = trimToHm(astro?.optJSONObject("sunset")?.optString("time", "").orEmpty())
+        val todaySkyconCode = daily.optJSONArray("skycon")?.optJSONObject(0)?.optString("value", "").orEmpty()
+        val currentSkyconCode = hourly.optJSONArray("skycon")?.optJSONObject(hi)?.optString("value", "").orEmpty()
 
         val rainSlots = mutableListOf<String>()
         val precipitation = hourly.optJSONArray("precipitation") ?: JSONArray()
@@ -563,63 +783,175 @@ class CampusService {
             val item = precipitation.optJSONObject(i) ?: continue
             val dt = item.optString("datetime", "").trim()
             val value = item.optDouble("value", 0.0)
-            if (dt.startsWith(dateText) && value > rainThresholdMm) {
-                rainSlots += dt
+            val localDate = parseWeatherDateTime(dt)?.toLocalDate()?.toString()
+            if (localDate == dateText && value > rainThresholdMm) {
+                rainSlots += dt.replace('T', ' ')
             }
         }
-        val rainToday = rainSlots.isNotEmpty()
-        val rainPeriods = rainPeriodsFromSlots(rainSlots)
 
-        return WeatherSummary(
-            title = "新乡 · 河南科技学院",
+        // 提取湿度
+        val humidityRaw = hourly.optJSONArray("humidity")?.optJSONObject(hi)?.optDouble("value", 0.5) ?: 0.5
+
+        return WeatherReport(
             date = date,
-            rainToday = rainToday,
-            rainStart = rainSlots.firstOrNull()?.replace('T', ' '),
-            rainEnd = rainSlots.lastOrNull()?.replace('T', ' '),
-            rainPeriodText = formatRainPeriods(rainPeriods),
             minTempC = minTemp,
             maxTempC = maxTemp,
             currentTempC = nowTemp,
+            todayWeatherCode = todaySkyconCode,
+            todayWeatherText = skyconToZh(todaySkyconCode),
+            currentWeatherCode = currentSkyconCode,
+            currentWeatherText = skyconToZh(currentSkyconCode),
+            rainSlots = rainSlots,
+            firstRainLocalDateTime = rainSlots.firstOrNull(),
+            firstRainLocalTime = rainSlots.firstOrNull()?.let(::trimToHm),
+            windSpeedKmh = wind * 3.6,
+            windSpeedMps = wind,
+            humidity = humidityRaw,
             sunrise = sunrise,
             sunset = sunset,
-            windSpeedMps = wind,
-            reminder = buildWeatherReminder(rainPeriods, maxTemp, minTemp, wind)
         )
     }
 
-    private fun buildWeatherReminder(rainPeriods: List<String>, tempMax: Double, tempMin: Double, windMps: Double): String {
-        val reminders = mutableListOf<String>()
-        buildRainReminder(rainPeriods)?.let { reminders += it }
-        val gap = tempMax - tempMin
-        if (tempMax >= 30) {
-            reminders += "白天偏热，注意防晒和补水(热鼠啦)🥵"
-        } else if (tempMin <= 10) {
-            if (tempMax >= 24 || gap >= 10) {
-                reminders += "早晚偏凉但中午会热，建议穿件薄外套便于穿脱🧥"
+    private fun buildDressingAdvice(report: WeatherReport): DressingAdvice {
+        val feelTemp = roundToOneDecimal(
+            calculateFeelsLike(report.currentTempC, report.windSpeedKmh, report.humidity)
+        )
+        val layer = tempLayers.firstOrNull { feelTemp < it.upperCelsius } ?: tempLayers.last()
+        val extraTips = mutableListOf<String>()
+
+        skyconExtraTips[report.todayWeatherCode]?.let { extraTips += it }
+        if (report.rainSlots.isNotEmpty() && extraTips.isEmpty()) {
+            extraTips += if (report.firstRainLocalTime != null) {
+                "今天有降水，首次降水约在 ${report.firstRainLocalTime}，记得带伞。"
             } else {
-                reminders += "早晚偏凉，建议加一件外套哦🧥"
+                "今天有降水，记得带伞。"
             }
         }
-        if (windMps >= 10) reminders += "当前风力较大，注意高空坠物和出行安全呀💨"
-        if (reminders.isEmpty()) reminders += "今天天气整体平稳，适合出行，gogogo出发喽🌤️"
-        return reminders.joinToString(" ")
+
+        val dayDelta = report.maxTempC - report.minTempC
+        if (dayDelta >= 10) {
+            extraTips += "今日温差 ${roundTemp(dayDelta)}°C，建议多带一件外套。"
+        }
+        if (feelTemp < report.currentTempC - 2) {
+            extraTips += "风较大，体感约 ${roundTemp(feelTemp)}°C，比气温更低，注意防风。"
+        }
+        // 高温高湿提示
+        if (report.currentTempC >= 27.0 && report.humidity >= 0.6 && feelTemp > report.currentTempC + 2) {
+            extraTips += "湿度${(report.humidity * 100).toInt()}%，闷热，注意防暑补水。"
+        }
+
+        val summary = "今天${report.todayWeatherText}，气温 ${roundTemp(report.minTempC)}-${roundTemp(report.maxTempC)}°C，当前体感 ${roundTemp(feelTemp)}°C（${layer.label}），${layer.advice.substringBefore('，')}。"
+        return DressingAdvice(
+            feelTempC = feelTemp,
+            temperatureLevel = layer.label,
+            coreAdvice = layer.advice,
+            extraTips = extraTips,
+            summary = summary
+        )
     }
 
-    private fun buildRainReminder(rainPeriods: List<String>): String? {
-        if (rainPeriods.isEmpty()) return null
-        val rainText = formatRainPeriods(rainPeriods) ?: return null
-        val currentIndex = rainPeriodIndex(labelForHour(LocalDateTime.now().hour))
-        val nextRainIndex = rainPeriods
-            .map { rainPeriodIndex(it) }
-            .filter { it >= currentIndex }
-            .minOrNull()
-            ?: rainPeriods.minOf { rainPeriodIndex(it) }
-
-        return when {
-            nextRainIndex <= currentIndex -> "${rainText}有雨，外出记得带伞哦~🌧️"
-            nextRainIndex - currentIndex == 1 -> "${rainText}有雨，接下来外出记得带伞哦~🌧️"
-            else -> "${rainText}有雨，晚些外出留意降雨。"
+    private fun buildReminder(summary: String, coreAdvice: String, extraTips: List<String>): String {
+        val parts = buildList {
+            if (summary.isNotBlank()) add(summary)
+            if (extraTips.isNotEmpty()) add(extraTips.first())
+            else if (coreAdvice.isNotBlank()) add(coreAdvice)
         }
+        return parts.joinToString(" ").ifBlank { "今天天气整体平稳，适合出行。" }
+    }
+
+    // 风寒指数：低温+有风时生效
+    private fun windChill(tempC: Double, windKmh: Double): Double {
+        return if (tempC <= 10.0 && windKmh >= 4.8) {
+            val windFactor = windKmh.pow(0.16)
+            13.12 +
+                0.6215 * tempC -
+                11.37 * windFactor +
+                0.3965 * tempC * windFactor
+        } else {
+            tempC
+        }
+    }
+
+    // 热指数：高温+高湿时生效（Rothfusz回归方程）
+    private fun heatIndex(tempC: Double, humidity: Double): Double {
+        val tempF = tempC * 9.0 / 5.0 + 32.0
+        val rh = humidity * 100.0 // 转为百分比
+
+        // 只在温度 >= 80°F (26.7°C) 且湿度 >= 40% 时计算
+        if (tempF < 80.0 || rh < 40.0) return tempC
+
+        var hi = -42.379 +
+            2.04901523 * tempF +
+            10.14333127 * rh -
+            0.22475541 * tempF * rh -
+            0.00683783 * tempF * tempF -
+            0.05481717 * rh * rh +
+            0.00122874 * tempF * tempF * rh +
+            0.00085282 * tempF * rh * rh -
+            0.00000199 * tempF * tempF * rh * rh
+
+        // 低湿度修正
+        if (rh < 13.0 && tempF in 80.0..112.0) {
+            hi -= ((13.0 - rh) / 4.0) * kotlin.math.sqrt((17.0 - kotlin.math.abs(tempF - 95.0)) / 17.0)
+        }
+        // 高湿度修正
+        if (rh > 85.0 && tempF in 80.0..87.0) {
+            hi += ((rh - 85.0) / 10.0) * ((87.0 - tempF) / 5.0)
+        }
+
+        // 转回摄氏度
+        return (hi - 32.0) * 5.0 / 9.0
+    }
+
+    // 综合体感温度计算
+    private fun calculateFeelsLike(tempC: Double, windKmh: Double, humidity: Double): Double {
+        return when {
+            // 低温+有风：风寒指数
+            tempC <= 10.0 && windKmh >= 4.8 -> windChill(tempC, windKmh)
+            // 高温+高湿：热指数
+            tempC >= 27.0 && humidity >= 0.4 -> heatIndex(tempC, humidity)
+            // 其他情况：返回实际温度
+            else -> tempC
+        }
+    }
+
+    private fun roundToOneDecimal(value: Double): Double {
+        return kotlin.math.round(value * 10.0) / 10.0
+    }
+
+    private fun roundTemp(value: Double): String {
+        val rounded = roundToOneDecimal(value)
+        return if (rounded % 1.0 == 0.0) rounded.toInt().toString() else rounded.toString()
+    }
+
+    private fun skyconToZh(code: String): String {
+        val normalized = code.trim()
+        if (normalized.isBlank()) return "未知"
+        return skyconZh[normalized] ?: normalized
+    }
+
+    private fun convertTemperatureToCelsius(value: Double, unit: String): Double {
+        if (value.isNaN()) return value
+        return when (unit.lowercase()) {
+            "fahrenheit" -> (value - 32.0) * 5.0 / 9.0
+            "kelvin" -> value - 273.15
+            else -> value
+        }
+    }
+
+    private fun convertWindSpeedToMps(value: Double, unit: String): Double {
+        return when (unit.lowercase()) {
+            "m/s" -> value
+            "mi/h", "mph" -> value * 0.44704
+            else -> kmhToMps(value)
+        }
+    }
+
+    private fun JSONArray?.toStringList(): List<String> {
+        val arr = this ?: return emptyList()
+        return (0 until arr.length())
+            .mapNotNull { arr.opt(it)?.toString()?.trim() }
+            .filter { it.isNotBlank() && it != "null" }
     }
 
     private fun kmhToMps(value: Double): Double = value / 3.6
@@ -628,7 +960,9 @@ class CampusService {
         val s = raw.trim()
         if (s.isBlank()) return null
         return runCatching { LocalDateTime.parse(s) }.getOrNull()
+            ?: runCatching { OffsetDateTime.parse(s).toLocalDateTime() }.getOrNull()
             ?: runCatching { LocalDateTime.parse(s, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) }.getOrNull()
+            ?: runCatching { LocalDateTime.parse(s, DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm")) }.getOrNull()
     }
 
     private fun extractHour(raw: String?): Int? {
