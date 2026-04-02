@@ -221,17 +221,32 @@ fun WeekSkeletonLoading(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = Spacing.sm),
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
         verticalArrangement = Arrangement.spacedBy(Spacing.sm)
     ) {
+        // 标题骨架（"本周课表" + "第X周"）
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            ShimmerBlock(
+                modifier = Modifier
+                    .width(120.dp)
+                    .height(24.dp)
+            )
+            ShimmerBlock(
+                modifier = Modifier
+                    .width(60.dp)
+                    .height(14.dp)
+            )
+        }
+
+        // 日期卡片骨架
         repeat(5) {
-            WeekDaySkeleton()
+            WeekDayCardSkeleton()
         }
     }
 }
 
 @Composable
-private fun WeekDaySkeleton() {
+private fun WeekDayCardSkeleton() {
     val shape = RoundedCornerShape(Radius.md)
 
     Box(
@@ -244,6 +259,7 @@ private fun WeekDaySkeleton() {
         Column(
             verticalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
+            // 星期几 + 课程数量
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -251,32 +267,34 @@ private fun WeekDaySkeleton() {
             ) {
                 ShimmerBlock(
                     modifier = Modifier
-                        .width(48.dp)
+                        .width(36.dp)
                         .height(16.dp)
                 )
                 ShimmerBlock(
                     modifier = Modifier
-                        .width(36.dp)
+                        .width(40.dp)
                         .height(12.dp)
                 )
             }
 
+            // 课程行骨架
             repeat(2) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = Spacing.xs),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     ShimmerBlock(
                         modifier = Modifier
-                            .fillMaxWidth(0.5f)
-                            .height(14.dp)
+                            .width(32.dp)
+                            .height(12.dp)
                     )
                     ShimmerBlock(
                         modifier = Modifier
-                            .fillMaxWidth(0.7f)
-                            .height(12.dp)
+                            .weight(1f)
+                            .height(14.dp)
                     )
                 }
             }
@@ -292,6 +310,7 @@ fun FreeRoomSkeletonLoading(modifier: Modifier = Modifier) {
             .padding(vertical = Spacing.sm),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
+        // 楼栋筛选骨架
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
@@ -300,84 +319,126 @@ fun FreeRoomSkeletonLoading(modifier: Modifier = Modifier) {
                 ShimmerBlock(
                     modifier = Modifier
                         .width(72.dp)
-                        .height(32.dp),
-                    shape = RoundedCornerShape(Radius.full)
+                        .height(40.dp),
+                    shape = RoundedCornerShape(Radius.lg)
                 )
             }
         }
 
-        val shape = RoundedCornerShape(Radius.lg)
+        // 推荐教室卡片骨架
+        val cardShape = RoundedCornerShape(Radius.lg)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(shape)
+                .clip(cardShape)
                 .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
                 .padding(Spacing.md)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ShimmerBlock(
-                        modifier = Modifier
-                            .width(32.dp)
-                            .height(10.dp)
-                    )
-                    ShimmerBlock(
-                        modifier = Modifier
-                            .width(80.dp)
-                            .height(16.dp)
-                    )
-                    ShimmerBlock(
-                        modifier = Modifier
-                            .width(120.dp)
-                            .height(12.dp)
-                    )
-                }
+                // 标题
                 ShimmerBlock(
                     modifier = Modifier
                         .width(80.dp)
-                        .height(32.dp)
+                        .height(14.dp)
                 )
+
+                // 教室名称
+                ShimmerBlock(
+                    modifier = Modifier
+                        .width(140.dp)
+                        .height(24.dp)
+                )
+
+                // 楼栋
+                ShimmerBlock(
+                    modifier = Modifier
+                        .width(100.dp)
+                        .height(14.dp)
+                )
+
+                // 节次标签
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
+                ) {
+                    repeat(3) {
+                        ShimmerBlock(
+                            modifier = Modifier
+                                .width(48.dp)
+                                .height(24.dp),
+                            shape = RoundedCornerShape(Radius.full)
+                        )
+                    }
+                }
             }
         }
 
-        Box(
+        // 候选教室标题骨架
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(shape)
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(Spacing.md)
+                .padding(vertical = Spacing.xs),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                repeat(4) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = Spacing.xs),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+            ShimmerBlock(
+                modifier = Modifier
+                    .width(80.dp)
+                    .height(16.dp)
+            )
+            ShimmerBlock(
+                modifier = Modifier
+                    .width(48.dp)
+                    .height(20.dp),
+                shape = RoundedCornerShape(Radius.full)
+            )
+        }
+
+        // 候选教室列表骨架
+        repeat(3) {
+            val itemShape = RoundedCornerShape(Radius.lg)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(itemShape)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(Spacing.md)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 图标骨架
+                    ShimmerBlock(
+                        modifier = Modifier.size(40.dp),
+                        shape = RoundedCornerShape(Radius.md)
+                    )
+
+                    // 信息骨架
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            ShimmerBlock(
-                                modifier = Modifier
-                                    .width(60.dp)
-                                    .height(14.dp)
-                            )
-                            ShimmerBlock(
-                                modifier = Modifier
-                                    .width(100.dp)
-                                    .height(12.dp)
-                            )
-                        }
                         ShimmerBlock(
                             modifier = Modifier
-                                .width(60.dp)
-                                .height(14.dp)
+                                .width(100.dp)
+                                .height(16.dp)
+                        )
+                        ShimmerBlock(
+                            modifier = Modifier
+                                .width(80.dp)
+                                .height(12.dp)
                         )
                     }
+
+                    // 节次骨架
+                    ShimmerBlock(
+                        modifier = Modifier
+                            .width(60.dp)
+                            .height(14.dp)
+                    )
                 }
             }
         }

@@ -1,9 +1,20 @@
 package com.cleankb.app.ui.components
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,30 +22,35 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -44,15 +60,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cleankb.app.data.CampusService
 import com.cleankb.app.ui.theme.Radius
 import com.cleankb.app.ui.theme.Spacing
 
+/**
+ * 空教室页面 - 简洁设计
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EnhancedFreeRoomTab(
     data: CampusService.FreeRoomSchedule?,
@@ -62,11 +85,7 @@ fun EnhancedFreeRoomTab(
     onBuildingSelect: (String?) -> Unit
 ) {
     if (data == null) {
-        return AnimatedEmptyState(
-            icon = Icons.Filled.SearchOff,
-            title = "暂无空教室数据",
-            subtitle = "请检查网络连接或学号设置"
-        )
+        return FreeRoomEmptyState()
     }
 
     val recommendedKey = data.recommended?.let { "${it.building}-${it.room}" }
@@ -74,820 +93,456 @@ fun EnhancedFreeRoomTab(
         .filterNot { "${it.building}-${it.room}" == recommendedKey }
         .take(12)
 
-    var showReorderPanel by remember { mutableStateOf(false) }
+    var showSortSheet by remember { mutableStateOf(false) }
+    var currentOrder by remember { mutableStateOf(buildingOrder) }
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = Spacing.sm),
+        modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(Spacing.md),
-        contentPadding = PaddingValues(bottom = Spacing.xxxl)
+        contentPadding = PaddingValues(bottom = Spacing.xxl)
     ) {
+        // 楼栋筛选器
         item {
-            FreeRoomOverviewCard(
-                data = data,
-                selectedBuilding = selectedBuilding
-            )
-        }
-
-        item {
-            BuildingFilterCard(
-                anchorBuilding = data.anchorBuilding,
+            BuildingFilterSection(
                 selectedBuilding = selectedBuilding,
                 buildingOrder = buildingOrder,
-                showReorderPanel = showReorderPanel,
                 onBuildingSelect = onBuildingSelect,
-                onToggleReorder = { showReorderPanel = !showReorderPanel }
+                onSortClick = {
+                    currentOrder = buildingOrder
+                    showSortSheet = true
+                }
             )
         }
 
-        if (showReorderPanel) {
-            item {
-                BuildingReorderCard(
-                    buildingOrder = buildingOrder,
-                    anchorBuilding = data.anchorBuilding,
-                    onOrderChange = onBuildingOrderChange
-                )
-            }
-        }
-
+        // 推荐教室
         item {
             if (data.recommended == null) {
                 EmptyRecommendationCard(
                     buildingLabel = selectedBuilding ?: data.anchorBuilding
                 )
             } else {
-                RecommendedRoomCard(
-                    room = data.recommended,
-                    targetPeriod = data.targetPeriod
-                )
+                RecommendedRoomCard(room = data.recommended)
             }
         }
 
+        // 候选教室列表
         if (remainingRooms.isNotEmpty()) {
             item {
-                SectionHeader(
-                    title = "候选教室",
-                    subtitle = "按当前规则排序后的其他选择"
-                )
+                CandidateRoomsHeader(count = remainingRooms.size)
             }
 
             items(remainingRooms, key = { "${it.building}-${it.room}" }) { room ->
-                CandidateRoomCard(
-                    room = room,
-                    targetPeriod = data.targetPeriod
-                )
+                CandidateRoomCard(room = room)
             }
         }
     }
-}
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun FreeRoomOverviewCard(
-    data: CampusService.FreeRoomSchedule,
-    selectedBuilding: String?
-) {
-    val focusBuilding = selectedBuilding ?: data.anchorBuilding
-
-    AppCard(
-        gradientColors = listOf(
-            MaterialTheme.colorScheme.surface,
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+    // 楼栋排序底部弹窗
+    if (showSortSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSortSheet = false },
+            sheetState = rememberModalBottomSheetState(),
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
-                ) {
-                    Text(
-                        text = "空教室推荐",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "第${data.currentWeek}周 · ${weekdayName(data.weekday)} · ${data.timeStatus}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                PillTag(
-                    icon = Icons.Filled.AccessTime,
-                    text = "第${data.targetPeriod}节",
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                )
-            }
-
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                if (focusBuilding.isNotBlank()) {
-                    InfoChip(
-                        icon = Icons.Filled.LocationOn,
-                        label = "当前楼栋",
-                        value = focusBuilding
-                    )
-                }
-                InfoChip(
-                    icon = Icons.Filled.WbSunny,
-                    label = "作息",
-                    value = data.season
-                )
-                InfoChip(
-                    icon = Icons.Filled.AutoAwesome,
-                    label = "推荐数",
-                    value = "${data.rooms.size} 间"
-                )
-            }
-
-            SummaryStrip(
-                title = "你的空档",
-                value = formatPeriods(data.freePeriods),
-                accent = MaterialTheme.colorScheme.secondary
-            )
-            SummaryStrip(
-                title = "你的有课节次",
-                value = formatPeriods(data.busyPeriods),
-                accent = MaterialTheme.colorScheme.tertiary
+            BuildingSortSheet(
+                buildings = currentOrder,
+                onMoveUp = { index ->
+                    if (index > 0) {
+                        val newList = currentOrder.toMutableList()
+                        val item = newList.removeAt(index)
+                        newList.add(index - 1, item)
+                        currentOrder = newList
+                        onBuildingOrderChange(newList)
+                    }
+                },
+                onMoveDown = { index ->
+                    if (index < currentOrder.size - 1) {
+                        val newList = currentOrder.toMutableList()
+                        val item = newList.removeAt(index)
+                        newList.add(index + 1, item)
+                        currentOrder = newList
+                        onBuildingOrderChange(newList)
+                    }
+                },
+                onClose = { showSortSheet = false }
             )
         }
     }
 }
 
+/**
+ * 楼栋筛选区域
+ */
 @Composable
-private fun BuildingFilterCard(
-    anchorBuilding: String,
+private fun BuildingFilterSection(
     selectedBuilding: String?,
     buildingOrder: List<String>,
-    showReorderPanel: Boolean,
     onBuildingSelect: (String?) -> Unit,
-    onToggleReorder: () -> Unit
+    onSortClick: () -> Unit
 ) {
-    AppCard {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.md)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LazyRow(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            contentPadding = PaddingValues(end = Spacing.xs)
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Spacing.md),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Text(
-                        text = "楼栋筛选",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "先看常用楼栋，再切换排序偏好",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                TertiaryActionChip(
-                    icon = Icons.AutoMirrored.Filled.Sort,
-                    text = if (showReorderPanel) "收起排序" else "调整排序",
-                    onClick = onToggleReorder
+            items(buildingOrder, key = { it }) { building ->
+                BuildingFilterChip(
+                    label = building,
+                    selected = selectedBuilding == building,
+                    onClick = { onBuildingSelect(building) }
                 )
             }
+        }
 
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = Spacing.md),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                item {
-                    BuildingPill(
-                        label = if (anchorBuilding.isBlank()) "智能推荐" else "最近楼栋",
-                        supporting = if (anchorBuilding.isBlank()) "按规则推荐" else anchorBuilding,
-                        selected = selectedBuilding == null,
-                        highlighted = true,
-                        onClick = { onBuildingSelect(null) }
-                    )
-                }
-
-                items(buildingOrder, key = { it }) { building ->
-                    BuildingPill(
-                        label = building,
-                        supporting = if (building == anchorBuilding) "当前最近" else "手动筛选",
-                        selected = selectedBuilding == building,
-                        highlighted = building == anchorBuilding,
-                        onClick = { onBuildingSelect(building) }
-                    )
-                }
-            }
+        // 排序按钮
+        IconButton(
+            onClick = onSortClick,
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Tune,
+                contentDescription = "调整楼栋顺序",
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
+/**
+ * 楼栋筛选芯片
+ */
 @Composable
-private fun BuildingPill(
+private fun BuildingFilterChip(
     label: String,
-    supporting: String,
     selected: Boolean,
-    highlighted: Boolean,
     onClick: () -> Unit
 ) {
-    val containerColor = when {
-        selected -> MaterialTheme.colorScheme.primary
-        highlighted -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
-        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-    }
-    val contentColor = when {
-        selected -> MaterialTheme.colorScheme.onPrimary
-        highlighted -> MaterialTheme.colorScheme.onPrimaryContainer
-        else -> MaterialTheme.colorScheme.onSurface
-    }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val containerColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+        },
+        label = "containerColor"
+    )
+
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        },
+        label = "contentColor"
+    )
+
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "chipScale"
+    )
 
     Box(
         modifier = Modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .clip(RoundedCornerShape(Radius.lg))
             .background(containerColor)
             .border(
                 width = if (selected) 0.dp else 1.dp,
-                color = if (highlighted) {
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                } else {
-                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-                },
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(Radius.lg)
             )
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = ripple(),
                 onClick = onClick
             )
             .padding(horizontal = Spacing.md, vertical = Spacing.sm)
     ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = contentColor
-            )
-            Text(
-                text = supporting,
-                style = MaterialTheme.typography.labelSmall,
-                color = contentColor.copy(alpha = 0.72f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun BuildingReorderCard(
-    buildingOrder: List<String>,
-    anchorBuilding: String,
-    onOrderChange: (List<String>) -> Unit
-) {
-    AppCard(
-        gradientColors = listOf(
-            MaterialTheme.colorScheme.surface,
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-        ) {
-            Text(
-                text = "楼栋排序",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "优先级越靠前，推荐时权重越高。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            buildingOrder.forEachIndexed { index, building ->
-                ReorderRow(
-                    index = index,
-                    building = building,
-                    isAnchor = building == anchorBuilding,
-                    canMoveUp = index > 0,
-                    canMoveDown = index < buildingOrder.lastIndex,
-                    onMoveUp = {
-                        if (index == 0) return@ReorderRow
-                        val next = buildingOrder.toMutableList()
-                        val item = next.removeAt(index)
-                        next.add(index - 1, item)
-                        onOrderChange(next)
-                    },
-                    onMoveDown = {
-                        if (index == buildingOrder.lastIndex) return@ReorderRow
-                        val next = buildingOrder.toMutableList()
-                        val item = next.removeAt(index)
-                        next.add(index + 1, item)
-                        onOrderChange(next)
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReorderRow(
-    index: Int,
-    building: String,
-    isAnchor: Boolean,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radius.md))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))
-            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "${index + 1}",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            Column {
-                Text(
-                    text = building,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = if (isAnchor) "当前最近楼栋" else "手动优先级",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-            SmallActionButton(
-                icon = Icons.Filled.ArrowUpward,
-                enabled = canMoveUp,
-                contentDescription = "上移",
-                onClick = onMoveUp
-            )
-            SmallActionButton(
-                icon = Icons.Filled.ArrowDownward,
-                enabled = canMoveDown,
-                contentDescription = "下移",
-                onClick = onMoveDown
-            )
-        }
-    }
-}
-
-@Composable
-private fun SmallActionButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    enabled: Boolean,
-    contentDescription: String,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .size(34.dp)
-            .clip(RoundedCornerShape(Radius.sm))
-            .background(
-                if (enabled) {
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                }
-            )
-            .clickable(
-                enabled = enabled,
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(),
-                onClick = onClick
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            modifier = Modifier.size(16.dp),
-            tint = if (enabled) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-            }
-        )
-    }
-}
-
-@Composable
-private fun EmptyRecommendationCard(buildingLabel: String) {
-    AppCard {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(Spacing.lg),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-        ) {
-            Icon(
-                imageVector = Icons.Filled.SearchOff,
-                contentDescription = null,
-                modifier = Modifier.size(32.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-            )
-            Text(
-                text = if (buildingLabel.isBlank()) "当前没找到符合规则的空教室" else "$buildingLabel 暂时没有合适空教室",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "换一个楼栋，或者等下一节再查。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun RecommendedRoomCard(
-    room: CampusService.FreeRoomItem,
-    targetPeriod: Int
-) {
-    val tone = availabilityTone(room.runLength)
-
-    AppCard(
-        gradientColors = listOf(
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
-            MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.52f)
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.md)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
-                ) {
-                    Text(
-                        text = "推荐教室",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = room.room,
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-
-                    val compactBuilding = compactFreeRoomBuilding(room.room, room.building)
-                    if (compactBuilding.isNotBlank()) {
-                        Text(
-                            text = compactBuilding,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f)
-                        )
-                    }
-                }
-
-                PillTag(
-                    icon = Icons.Filled.AutoAwesome,
-                    text = tone.label,
-                    containerColor = tone.container,
-                    contentColor = tone.content
-                )
-            }
-
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                InfoChip(
-                    icon = Icons.Filled.AccessTime,
-                    label = "起始节次",
-                    value = "第${room.startPeriod}节"
-                )
-                InfoChip(
-                    icon = Icons.Filled.Tune,
-                    label = "连续空闲",
-                    value = "${room.runLength} 节"
-                )
-                InfoChip(
-                    icon = Icons.Filled.MeetingRoom,
-                    label = "容量",
-                    value = "${room.capacity} 人"
-                )
-            }
-
-            SummaryStrip(
-                title = if (room.startPeriod == targetPeriod) "现在可去" else "建议等待",
-                value = if (room.startPeriod == targetPeriod) {
-                    "当前就可以使用，连续空闲 ${room.runLength} 节"
-                } else {
-                    "从第${room.startPeriod}节开始空出，连续 ${room.runLength} 节"
-                },
-                accent = tone.content
-            )
-
-            PeriodFlow(periods = room.freePeriods)
-        }
-    }
-}
-
-@Composable
-private fun CandidateRoomCard(
-    room: CampusService.FreeRoomItem,
-    targetPeriod: Int
-) {
-    val tone = availabilityTone(room.runLength)
-
-    AppCard {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(Radius.md))
-                            .background(tone.container),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.MeetingRoom,
-                            contentDescription = null,
-                            tint = tone.content
-                        )
-                    }
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Text(
-                            text = room.room,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        val compactBuilding = compactFreeRoomBuilding(room.room, room.building)
-                        if (compactBuilding.isNotBlank()) {
-                            Text(
-                                text = compactBuilding,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = if (room.startPeriod == targetPeriod) "现在可用" else "第${room.startPeriod}节可用",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = tone.content,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "连续 ${room.runLength} 节",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "容量 ${room.capacity} 人",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = formatPeriods(room.freePeriods),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun TertiaryActionChip(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    text: String,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(Radius.full))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(),
-                onClick = onClick
-            )
-            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(14.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
         Text(
-            text = text,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun PillTag(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    text: String,
-    containerColor: Color,
-    contentColor: Color
-) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(Radius.full))
-            .background(containerColor)
-            .padding(horizontal = Spacing.sm, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(14.dp),
-            tint = contentColor
-        )
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelMedium,
-            color = contentColor,
-            fontWeight = FontWeight.SemiBold
-        )
-    }
-}
-
-@Composable
-private fun InfoChip(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    value: String
-) {
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(Radius.md))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.88f))
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
-                shape = RoundedCornerShape(Radius.md)
-            )
-            .padding(horizontal = Spacing.sm, vertical = Spacing.sm),
-        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-
-        Column {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-    }
-}
-
-@Composable
-private fun SummaryStrip(
-    title: String,
-    value: String,
-    accent: Color
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(Radius.md))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))
-            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall,
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
-            color = accent,
-            maxLines = 2,
+            color = contentColor,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
     }
 }
 
+/**
+ * 楼栋排序底部弹窗内容
+ */
+@Composable
+private fun BuildingSortSheet(
+    buildings: List<String>,
+    onMoveUp: (Int) -> Unit,
+    onMoveDown: (Int) -> Unit,
+    onClose: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = Spacing.xxl),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md)
+    ) {
+        // 标题栏
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.lg),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "调整楼栋顺序",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            IconButton(onClick = onClose) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "关闭"
+                )
+            }
+        }
+
+        // 提示文字
+        Text(
+            text = "点击箭头按钮调整楼栋的排列顺序",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = Spacing.lg)
+        )
+
+        // 楼栋列表
+        LazyColumn(
+            modifier = Modifier.padding(horizontal = Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs)
+        ) {
+            itemsIndexed(buildings) { index, building ->
+                BuildingSortItem(
+                    name = building,
+                    index = index + 1,
+                    canMoveUp = index > 0,
+                    canMoveDown = index < buildings.size - 1,
+                    onMoveUp = { onMoveUp(index) },
+                    onMoveDown = { onMoveDown(index) }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 楼栋排序列表项
+ */
+@Composable
+private fun BuildingSortItem(
+    name: String,
+    index: Int,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit
+) {
+    val shape = RoundedCornerShape(Radius.md)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.sm),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 序号 + 名称
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "$index",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            // 上下移动按钮
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                IconButton(
+                    onClick = onMoveUp,
+                    enabled = canMoveUp,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowUpward,
+                        contentDescription = "上移",
+                        modifier = Modifier.size(18.dp),
+                        tint = if (canMoveUp) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        }
+                    )
+                }
+                IconButton(
+                    onClick = onMoveDown,
+                    enabled = canMoveDown,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowDownward,
+                        contentDescription = "下移",
+                        modifier = Modifier.size(18.dp),
+                        tint = if (canMoveDown) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 推荐教室卡片 - 紧凑版
+ */
+@Composable
+private fun RecommendedRoomCard(room: CampusService.FreeRoomItem) {
+    val shape = RoundedCornerShape(Radius.lg)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 4.dp,
+                shape = shape,
+                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+            )
+            .clip(shape)
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f)
+                    )
+                )
+            )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 左侧：教室信息
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // 推荐标签 + 教室名
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = room.room,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+
+                // 楼栋
+                val compactBuilding = compactFreeRoomBuilding(room.room, room.building)
+                if (compactBuilding.isNotBlank()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.LocationOn,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            text = compactBuilding,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+
+            // 右侧：空闲节次
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "空闲节次",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                )
+                PeriodFlow(periods = room.freePeriods)
+            }
+        }
+    }
+}
+
+/**
+ * 空闲节次流式标签
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PeriodFlow(periods: List<Int>) {
@@ -901,10 +556,10 @@ private fun PeriodFlow(periods: List<Int>) {
                 modifier = Modifier
                     .clip(RoundedCornerShape(Radius.full))
                     .background(container)
-                    .padding(horizontal = Spacing.sm, vertical = 6.dp)
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
             ) {
                 Text(
-                    text = "第${period}节",
+                    text = "$period",
                     style = MaterialTheme.typography.labelSmall,
                     color = content,
                     fontWeight = FontWeight.SemiBold
@@ -913,6 +568,299 @@ private fun PeriodFlow(periods: List<Int>) {
         }
     }
 }
+
+/**
+ * 空推荐卡片
+ */
+@Composable
+private fun EmptyRecommendationCard(buildingLabel: String) {
+    val shape = RoundedCornerShape(Radius.lg)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(Spacing.lg),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.SearchOff,
+                contentDescription = null,
+                modifier = Modifier.size(32.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+            Text(
+                text = if (buildingLabel.isBlank()) "暂无空教室" else "$buildingLabel 暂无空教室",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+/**
+ * 候选教室标题
+ */
+@Composable
+private fun CandidateRoomsHeader(count: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = Spacing.xs),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(16.dp)
+                    .clip(RoundedCornerShape(1.5.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+            Text(
+                text = "候选教室",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(Radius.full))
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+                .padding(horizontal = Spacing.sm, vertical = 2.dp)
+        ) {
+            Text(
+                text = "$count 间",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+/**
+ * 候选教室卡片 - 简洁版
+ */
+@Composable
+private fun CandidateRoomCard(room: CampusService.FreeRoomItem) {
+    val tone = availabilityTone(room.runLength)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.98f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "cardScale"
+    )
+
+    val shape = RoundedCornerShape(Radius.lg)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .shadow(
+                elevation = 2.dp,
+                shape = shape,
+                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
+            )
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple(),
+                onClick = { }
+            )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.md),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // 教室图标
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(Radius.md))
+                    .background(tone.container),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.MeetingRoom,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = tone.content
+                )
+            }
+
+            // 教室信息
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = room.room,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                val compactBuilding = compactFreeRoomBuilding(room.room, room.building)
+                if (compactBuilding.isNotBlank()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.LocationOn,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            text = compactBuilding,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
+            // 空闲节次
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = "空闲",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+                Text(
+                    text = formatPeriods(room.freePeriods),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 空教室页面空状态
+ */
+@Composable
+private fun FreeRoomEmptyState() {
+    val infiniteTransition = rememberInfiniteTransition(label = "emptyState")
+
+    val floatY by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = -8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "floatY"
+    )
+
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(Spacing.xxl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(100.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(100.dp)
+                    .clip(CircleShape)
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = pulseAlpha),
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0f)
+                            )
+                        )
+                    )
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+            )
+
+            Icon(
+                imageVector = Icons.Filled.MeetingRoom,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(36.dp)
+                    .graphicsLayer { translationY = floatY },
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        Spacer(modifier = Modifier.height(Spacing.lg))
+
+        Text(
+            text = "暂无空教室数据",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(Spacing.xs))
+
+        Text(
+            text = "请检查网络连接或学号设置",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+// ==================== 工具函数 ====================
 
 private data class AvailabilityTone(
     val label: String,
@@ -964,19 +912,6 @@ private fun getPeriodColors(period: Int): Pair<Color, Color> {
             MaterialTheme.colorScheme.surfaceVariant,
             MaterialTheme.colorScheme.onSurfaceVariant
         )
-    }
-}
-
-private fun weekdayName(weekday: Int): String {
-    return when (weekday) {
-        1 -> "周一"
-        2 -> "周二"
-        3 -> "周三"
-        4 -> "周四"
-        5 -> "周五"
-        6 -> "周六"
-        7 -> "周日"
-        else -> "周?"
     }
 }
 

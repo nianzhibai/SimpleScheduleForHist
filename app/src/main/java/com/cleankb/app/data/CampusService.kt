@@ -235,15 +235,15 @@ class CampusService {
         "RAIN_WITH_SNOW" to "雨夹雪",
     )
     private val tempLayers = listOf(
-        TempLayerRule(-10.0, "极寒", "羽绒服+厚毛衣+保暖内衣，戴帽子手套围巾，穿雪地靴"),
-        TempLayerRule(0.0, "严寒", "厚羽绒服+毛衣+保暖内衣，戴围巾手套，穿厚底防滑鞋"),
-        TempLayerRule(5.0, "寒冷", "羽绒服或厚棉服+毛衣+打底衫，可戴围巾"),
-        TempLayerRule(10.0, "较冷", "厚外套+针织衫+长裤，注意保暖"),
-        TempLayerRule(15.0, "凉爽", "轻薄外套+长袖上衣+长裤"),
-        TempLayerRule(20.0, "舒适偏凉", "薄外套或厚长袖+长裤，早晚带一件外套"),
-        TempLayerRule(25.0, "舒适", "薄长袖或T恤+长裤，轻薄舒适即可"),
-        TempLayerRule(30.0, "温热", "透气T恤+薄款长裤或七分裤，选速干面料"),
-        TempLayerRule(35.0, "炎热", "短袖短裤或裙，浅色透气，注意防晒"),
+        TempLayerRule(-10.0, "极寒", "羽绒服、厚毛衣、保暖内衣，戴帽子手套围巾，穿雪地靴"),
+        TempLayerRule(0.0, "严寒", "厚羽绒服、毛衣、保暖内衣，戴围巾手套，穿厚底防滑鞋"),
+        TempLayerRule(5.0, "寒冷", "羽绒服或厚棉服、毛衣、打底衫，可戴围巾"),
+        TempLayerRule(10.0, "较冷", "厚外套、针织衫、长裤，注意保暖"),
+        TempLayerRule(15.0, "凉爽", "轻薄外套、长袖上衣、长裤"),
+        TempLayerRule(20.0, "舒适偏凉", "薄外套或厚长袖、长裤，早晚带一件外套"),
+        TempLayerRule(25.0, "舒适", "薄长袖或T恤、长裤，轻薄舒适即可"),
+        TempLayerRule(30.0, "温热", "透气T恤、薄款长裤或七分裤，选速干面料"),
+        TempLayerRule(35.0, "炎热", "短袖短裤或裙装，浅色透气，注意防晒"),
         TempLayerRule(Double.POSITIVE_INFINITY, "酷暑", "最轻薄的衣物，防晒衫或遮阳帽必备，户外尽量避开正午"),
     )
     private val skyconExtraTips = mapOf(

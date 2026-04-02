@@ -73,6 +73,7 @@ import com.cleankb.app.ui.theme.Spacing
  * - 左侧时间指示器区分进行中/已完成/未开始
  * - 课程卡片带渐变背景和按压动画
  * - 当前课程高亮显示
+ * - 上午/下午/晚上分隔
  */
 @Composable
 fun TodayCoursePage(
@@ -103,10 +104,20 @@ fun TodayCoursePage(
                 TodayCourseEmpty()
             }
         } else {
+            var lastPeriod: DayPeriod? = null
+
             itemsIndexed(
                 items = data.courses,
                 key = { index, course -> "${course.name}-${course.section}-${course.location}-${course.beginTime}" }
             ) { index, course ->
+                val currentPeriod = getDayPeriod(course)
+
+                // 如果时间段变化，显示分隔符
+                if (currentPeriod != lastPeriod) {
+                    DayPeriodDivider(period = currentPeriod, isDark = isDark)
+                    lastPeriod = currentPeriod
+                }
+
                 val isCurrent = isCurrentCourse(course)
                 val isPast = isPastCourse(course)
 
@@ -630,6 +641,90 @@ private fun TodayCoursePageEmpty() {
             text = "请检查网络连接或学号设置",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+// ==================== 时间段分隔 ====================
+
+/**
+ * 一天中的时间段
+ */
+private enum class DayPeriod {
+    MORNING,    // 上午
+    AFTERNOON,  // 下午
+    EVENING     // 晚上
+}
+
+/**
+ * 根据课程开始时间判断时间段
+ */
+private fun getDayPeriod(course: CampusService.CourseItem): DayPeriod {
+    val beginTime = parseTime(course.beginTime)
+    val hour = beginTime?.hour ?: 12
+
+    return when {
+        hour < 12 -> DayPeriod.MORNING
+        hour < 18 -> DayPeriod.AFTERNOON
+        else -> DayPeriod.EVENING
+    }
+}
+
+/**
+ * 时间段分隔符
+ */
+@Composable
+private fun DayPeriodDivider(period: DayPeriod, isDark: Boolean) {
+    val (icon, label, color) = when (period) {
+        DayPeriod.MORNING -> Triple(
+            "🌅",
+            "上午",
+            if (isDark) Color(0xFFFFB74D) else Color(0xFFFF9800)
+        )
+        DayPeriod.AFTERNOON -> Triple(
+            "☀️",
+            "下午",
+            if (isDark) Color(0xFF64B5F6) else Color(0xFF1976D2)
+        )
+        DayPeriod.EVENING -> Triple(
+            "🌙",
+            "晚上",
+            if (isDark) Color(0xFFCE93D8) else Color(0xFF9C27B0)
+        )
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+    ) {
+        Text(
+            text = icon,
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = color
+        )
+
+        // 渐变分隔线
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            color.copy(alpha = 0.3f),
+                            color.copy(alpha = 0.05f)
+                        )
+                    )
+                )
         )
     }
 }

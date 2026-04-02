@@ -31,12 +31,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Air
 import androidx.compose.material.icons.filled.Checkroom
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.TipsAndUpdates
 import androidx.compose.material.icons.filled.Umbrella
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.WbTwilight
-import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.WbCloudy
 import androidx.compose.material3.Card
@@ -49,7 +49,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -138,7 +137,7 @@ fun WeatherDetailPage(
 }
 
 /**
- * 天气英雄卡片 - 页面核心展示
+ * 天气英雄卡片 - 紧凑版
  */
 @Composable
 private fun WeatherHeroCard(
@@ -171,9 +170,9 @@ private fun WeatherHeroCard(
         modifier = Modifier
             .fillMaxWidth()
             .shadow(
-                elevation = 8.dp,
+                elevation = 6.dp,
                 shape = shape,
-                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
             ),
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = Color.Transparent)
@@ -186,107 +185,65 @@ private fun WeatherHeroCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(Spacing.lg),
+                    .padding(Spacing.md),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(Spacing.md)
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
             ) {
                 // 位置信息
                 Text(
                     text = data.title,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                // 天气核心信息
+                // 天气核心信息：图标+天气文字 | 温度
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 天气图标
-                    WeatherAnimatedIconLarge(
-                        weatherText = data.currentWeatherText,
-                        rainToday = data.rainToday,
-                        isDark = isDark
-                    )
-
-                    // 温度信息
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "${fmtTemp(data.currentTempC)}°",
-                            style = MaterialTheme.typography.displayMedium.copy(fontSize = 64.sp),
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                    // 天气图标 + 天气描述
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        WeatherAnimatedIconLarge(
+                            weatherText = data.currentWeatherText,
+                            rainToday = data.rainToday,
+                            isDark = isDark,
+                            size = 56.dp
                         )
                         Text(
                             text = data.currentWeatherText,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.Medium
                         )
                     }
 
-                    // 温度范围
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "↑",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            Text(
-                                text = "${fmtTemp(data.maxTempC)}°",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "↓",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "${fmtTemp(data.minTempC)}°",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                // 体感温度条
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(Radius.sm))
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f))
-                        .padding(horizontal = Spacing.md, vertical = Spacing.xs),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
-                ) {
+                    // 当前温度
                     Text(
-                        text = "体感",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "${fmtTemp(data.feelTempC)}°",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        text = "${fmtTemp(data.currentTempC)}°",
+                        style = MaterialTheme.typography.displayMedium.copy(fontSize = 52.sp),
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    if (data.temperatureLevel.isNotBlank()) {
+
+                    // 温度范围
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
                         Text(
-                            text = "·",
+                            text = "温度",
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = data.temperatureLevel,
+                            text = "${fmtTemp(data.minTempC)}℃ ~ ${fmtTemp(data.maxTempC)}℃",
                             style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.secondary
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
@@ -300,12 +257,12 @@ private fun WeatherHeroCard(
                             .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
                             .padding(Spacing.sm),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                        horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.TipsAndUpdates,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(14.dp),
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Text(
@@ -321,13 +278,14 @@ private fun WeatherHeroCard(
 }
 
 /**
- * 大号天气动画图标
+ * 天气动画图标
  */
 @Composable
 private fun WeatherAnimatedIconLarge(
     weatherText: String,
     rainToday: Boolean,
-    isDark: Boolean
+    isDark: Boolean,
+    size: androidx.compose.ui.unit.Dp = 64.dp
 ) {
     val icon: ImageVector
     val iconColor: Color
@@ -362,22 +320,17 @@ private fun WeatherAnimatedIconLarge(
         label = "iconPulse"
     )
 
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.size(80.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = weatherText,
-            tint = iconColor,
-            modifier = Modifier
-                .size(64.dp)
-                .graphicsLayer {
-                    scaleX = pulse
-                    scaleY = pulse
-                }
-        )
-    }
+    Icon(
+        imageVector = icon,
+        contentDescription = weatherText,
+        tint = iconColor,
+        modifier = Modifier
+            .size(size)
+            .graphicsLayer {
+                scaleX = pulse
+                scaleY = pulse
+            }
+    )
 }
 
 /**
@@ -401,7 +354,7 @@ private fun WeatherRainAlert(data: CampusService.WeatherSummary) {
         ) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(40.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center
@@ -409,7 +362,7 @@ private fun WeatherRainAlert(data: CampusService.WeatherSummary) {
                 Icon(
                     imageVector = Icons.Filled.Umbrella,
                     contentDescription = null,
-                    modifier = Modifier.size(28.dp),
+                    modifier = Modifier.size(24.dp),
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -455,7 +408,7 @@ private fun WeatherInfoCard(data: CampusService.WeatherSummary) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(Spacing.lg),
+                .padding(Spacing.md),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             WeatherInfoItem(
@@ -493,7 +446,7 @@ private fun WeatherInfoItem(
         Icon(
             imageVector = icon,
             contentDescription = label,
-            modifier = Modifier.size(24.dp),
+            modifier = Modifier.size(20.dp),
             tint = MaterialTheme.colorScheme.primary
         )
         Text(
@@ -546,28 +499,26 @@ private fun WeatherDressingAdvice(data: CampusService.WeatherSummary) {
                 )
             }
 
+            // 体感温度 + 舒适度
             if (data.temperatureLevel.isNotBlank()) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(Radius.xs))
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .padding(horizontal = Spacing.sm, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = data.temperatureLevel,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                    }
                     Text(
-                        text = "体感 ${fmtTemp(data.feelTempC)}°C",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "体感 ${fmtTemp(data.feelTempC)}℃",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "·",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = data.temperatureLevel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.secondary
                     )
                 }
             }
@@ -675,7 +626,6 @@ private fun WeatherPageSkeleton() {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(300.dp)
                         .padding(Spacing.lg),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(Spacing.md)

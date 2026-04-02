@@ -522,7 +522,8 @@ private fun CleanKbApp() {
             Box(modifier = Modifier.fillMaxSize()) {
                 if (currentTabUiState.loading) {
                     when (currentTab) {
-                        QueryTab.TODAY, QueryTab.WEEK -> EnhancedLoadingState(message = "正在加载...")
+                        QueryTab.TODAY -> EnhancedLoadingState(message = "正在加载...")
+                        QueryTab.WEEK -> WeekSkeletonLoading()
                         QueryTab.FREE_ROOM -> FreeRoomSkeletonLoading()
                         QueryTab.WEATHER -> WeatherLoadingCard()
                     }
@@ -2222,6 +2223,99 @@ private fun mappedOptionForAnchor(anchorBuilding: String): String? {
 }
 
 // ==================== 增强版今日课表 ====================
+
+/**
+ * 一天中的时间段
+ */
+private enum class DayPeriod {
+    MORNING,    // 上午
+    AFTERNOON,  // 下午
+    EVENING     // 晚上
+}
+
+/**
+ * 根据课程节次判断时间段
+ * 1~4节：上午
+ * 5~8节：下午
+ * 9~10节：晚上
+ */
+private fun getDayPeriod(course: CampusService.CourseItem): DayPeriod {
+    val section = extractSectionNumber(course.section)
+    return when {
+        section <= 4 -> DayPeriod.MORNING
+        section <= 8 -> DayPeriod.AFTERNOON
+        else -> DayPeriod.EVENING
+    }
+}
+
+/**
+ * 从节次文本中提取数字（如"1-2节" -> 1）
+ */
+private fun extractSectionNumber(section: String): Int {
+    val match = Regex("(\\d+)").find(section.trim())
+    return match?.groupValues?.get(1)?.toIntOrNull() ?: 0
+}
+
+private fun parseTimeForToday(timeStr: String): java.time.LocalTime? {
+    if (timeStr.isBlank()) return null
+    return try {
+        java.time.LocalTime.parse(timeStr)
+    } catch (e: Exception) {
+        null
+    }
+}
+
+/**
+ * 时间段分隔符
+ */
+@Composable
+private fun DayPeriodDivider(period: DayPeriod) {
+    val (label, color) = when (period) {
+        DayPeriod.MORNING -> Pair(
+            "上午",
+            Color(0xFFFF9800)
+        )
+        DayPeriod.AFTERNOON -> Pair(
+            "下午",
+            Color(0xFF1976D2)
+        )
+        DayPeriod.EVENING -> Pair(
+            "晚上",
+            Color(0xFF9C27B0)
+        )
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = color
+        )
+
+        // 渐变分隔线
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            color.copy(alpha = 0.3f),
+                            color.copy(alpha = 0.05f)
+                        )
+                    )
+                )
+        )
+    }
+}
+
 @Composable
 private fun EnhancedTodayTab(data: CampusService.TodaySchedule?, isDark: Boolean) {
     if (data == null) {
@@ -2257,10 +2351,20 @@ private fun EnhancedTodayTab(data: CampusService.TodaySchedule?, isDark: Boolean
                 }
             }
         } else {
+            var lastPeriod: DayPeriod? = null
+
             items(
                 items = data.courses,
                 key = { "${it.name}-${it.section}-${it.location}-${it.beginTime}" }
             ) { course ->
+                val currentPeriod = getDayPeriod(course)
+
+                // 如果时间段变化，显示分隔符
+                if (currentPeriod != lastPeriod) {
+                    DayPeriodDivider(period = currentPeriod)
+                    lastPeriod = currentPeriod
+                }
+
                 TimelineCourseCard(
                     course = course,
                     index = data.courses.indexOf(course),
@@ -2493,32 +2597,49 @@ private fun WeatherHeroCard(data: CampusService.WeatherSummary, isDark: Boolean)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(Spacing.md),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+                .padding(Spacing.md)
         ) {
-            // 位置
+            // 位置（居中）
             Text(
                 text = data.title,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
             )
 
-            // 天气图标和温度横向排列
+            Spacer(modifier = Modifier.height(Spacing.sm))
+
+            // 主内容：左边天气图标+描述 | 右边温度
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 天气图标
-                WeatherAnimatedIcon(
-                    weatherText = data.currentWeatherText,
-                    rainToday = data.rainToday,
-                    isDark = isDark
-                )
+                // 左边：天气图标 + 天气描述
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    WeatherAnimatedIcon(
+                        weatherText = data.currentWeatherText,
+                        rainToday = data.rainToday,
+                        isDark = isDark,
+                        size = 48.dp
+                    )
+                    Text(
+                        text = data.currentWeatherText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
 
-                // 当前温度
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // 右边：当前温度 + 温度范围（居中对齐）
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Text(
                         text = "${fmtTemp(data.currentTempC)}°",
                         style = MaterialTheme.typography.displayMedium.copy(fontSize = 48.sp),
@@ -2526,33 +2647,12 @@ private fun WeatherHeroCard(data: CampusService.WeatherSummary, isDark: Boolean)
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = data.currentWeatherText,
+                        text = "${fmtTemp(data.minTempC)}℃ ~ ${fmtTemp(data.maxTempC)}℃",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                // 温度范围
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "↑${fmtTemp(data.maxTempC)}°",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "↓${fmtTemp(data.minTempC)}°",
-                        style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-
-            // 体感温度
-            Text(
-                text = "体感 ${fmtTemp(data.feelTempC)}°",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
@@ -2561,7 +2661,8 @@ private fun WeatherHeroCard(data: CampusService.WeatherSummary, isDark: Boolean)
 private fun WeatherAnimatedIcon(
     weatherText: String,
     rainToday: Boolean,
-    isDark: Boolean
+    isDark: Boolean,
+    size: androidx.compose.ui.unit.Dp = 40.dp
 ) {
     val icon: ImageVector
     val iconColor: Color
@@ -2596,22 +2697,17 @@ private fun WeatherAnimatedIcon(
         label = "iconPulse"
     )
 
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.size(48.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = weatherText,
-            tint = iconColor,
-            modifier = Modifier
-                .size(40.dp)
-                .graphicsLayer {
-                    scaleX = pulse
-                    scaleY = pulse
-                }
-        )
-    }
+    Icon(
+        imageVector = icon,
+        contentDescription = weatherText,
+        tint = iconColor,
+        modifier = Modifier
+            .size(size)
+            .graphicsLayer {
+                scaleX = pulse
+                scaleY = pulse
+            }
+    )
 }
 
 @Composable
@@ -2774,29 +2870,27 @@ private fun WeatherDressingCard(data: CampusService.WeatherSummary) {
                 )
             }
 
+            // 体感温度 + 舒适度
             if (data.temperatureLevel.isNotBlank()) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
                     modifier = Modifier.padding(start = Spacing.xs)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(Radius.xs))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                            .padding(horizontal = Spacing.xs, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = data.temperatureLevel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
                     Text(
-                        text = "体感 ${fmtTemp(data.feelTempC)}°C",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "体感 ${fmtTemp(data.feelTempC)}℃",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "·",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = data.temperatureLevel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.secondary
                     )
                 }
             }
