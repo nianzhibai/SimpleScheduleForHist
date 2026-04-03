@@ -32,7 +32,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.SearchOff
@@ -49,10 +51,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +68,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -139,9 +144,13 @@ fun EnhancedFreeRoomTab(
 
     // 楼栋排序底部弹窗
     if (showSortSheet) {
+        val sheetState = rememberModalBottomSheetState(
+            skipPartiallyExpanded = true,
+            confirmValueChange = { it != SheetValue.Hidden }
+        )
         ModalBottomSheet(
-            onDismissRequest = { showSortSheet = false },
-            sheetState = rememberModalBottomSheetState(),
+            onDismissRequest = { },
+            sheetState = sheetState,
             containerColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.onSurface
         ) {
@@ -298,7 +307,8 @@ private fun BuildingSortSheet(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = Spacing.xxl),
+            .padding(bottom = Spacing.xxl)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
         // 标题栏
@@ -324,18 +334,18 @@ private fun BuildingSortSheet(
 
         // 提示文字
         Text(
-            text = "点击箭头按钮调整楼栋的排列顺序",
+            text = "点击箭头按钮调整楼栋顺序",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = Spacing.lg)
         )
 
         // 楼栋列表
-        LazyColumn(
+        Column(
             modifier = Modifier.padding(horizontal = Spacing.lg),
             verticalArrangement = Arrangement.spacedBy(Spacing.xs)
         ) {
-            itemsIndexed(buildings) { index, building ->
+            buildings.forEachIndexed { index, building ->
                 BuildingSortItem(
                     name = building,
                     index = index + 1,
@@ -407,12 +417,12 @@ private fun BuildingSortItem(
 
             // 上下移动按钮
             Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 IconButton(
                     onClick = onMoveUp,
                     enabled = canMoveUp,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.ArrowUpward,
@@ -428,7 +438,7 @@ private fun BuildingSortItem(
                 IconButton(
                     onClick = onMoveDown,
                     enabled = canMoveDown,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.ArrowDownward,
@@ -457,9 +467,9 @@ private fun RecommendedRoomCard(room: CampusService.FreeRoomItem) {
         modifier = Modifier
             .fillMaxWidth()
             .shadow(
-                elevation = 4.dp,
+                elevation = 1.dp,
                 shape = shape,
-                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
             )
             .clip(shape)
             .background(
@@ -662,28 +672,11 @@ private fun CandidateRoomsHeader(count: Int) {
  */
 @Composable
 private fun CandidateRoomCard(room: CampusService.FreeRoomItem) {
-    val tone = availabilityTone(room.runLength)
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.98f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
-        label = "cardScale"
-    )
-
     val shape = RoundedCornerShape(Radius.lg)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
             .shadow(
                 elevation = 2.dp,
                 shape = shape,
@@ -691,11 +684,6 @@ private fun CandidateRoomCard(room: CampusService.FreeRoomItem) {
             )
             .clip(shape)
             .background(MaterialTheme.colorScheme.surface)
-            .clickable(
-                interactionSource = interactionSource,
-                indication = ripple(),
-                onClick = { }
-            )
     ) {
         Row(
             modifier = Modifier
@@ -704,19 +692,19 @@ private fun CandidateRoomCard(room: CampusService.FreeRoomItem) {
             horizontalArrangement = Arrangement.spacedBy(Spacing.md),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 教室图标
+            // 教室图标 - 统一灰色
             Box(
                 modifier = Modifier
                     .size(40.dp)
                     .clip(RoundedCornerShape(Radius.md))
-                    .background(tone.container),
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Filled.MeetingRoom,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = tone.content
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 

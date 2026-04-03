@@ -564,7 +564,7 @@ private fun WeatherTipsSection(tips: List<String>) {
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "温馨提示",
+                    text = "温馨提醒",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
