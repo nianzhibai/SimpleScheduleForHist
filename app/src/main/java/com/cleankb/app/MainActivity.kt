@@ -124,6 +124,7 @@ import com.cleankb.app.ui.components.PrimaryButton
 import com.cleankb.app.ui.components.SecondaryButton
 import com.cleankb.app.ui.components.SectionHeader
 import com.cleankb.app.ui.components.TimelineCourseCard
+import com.cleankb.app.ui.components.TodaySkeletonLoading
 import com.cleankb.app.ui.components.WeekSkeletonLoading
 import com.cleankb.app.ui.theme.CleanKbTheme
 import com.cleankb.app.ui.theme.Radius
@@ -239,8 +240,8 @@ private fun CleanKbApp() {
             ) { ThemeMode.SYSTEM }
         )
     }
-    val isDark = themeMode == ThemeMode.DARK ||
-        (themeMode == ThemeMode.SYSTEM && androidx.compose.foundation.isSystemInDarkTheme())
+    // 始终使用浅色模式
+    val isDark = false
 
     fun saveThemeMode(mode: ThemeMode) {
         themeMode = mode
@@ -402,8 +403,6 @@ private fun CleanKbApp() {
             CleanKbTheme(themeMode = themeMode) {
                 SettingsPage(
                     userId = userId,
-                    themeMode = themeMode,
-                    onThemeChange = { saveThemeMode(it) },
                     onChangeUserId = {
                         dialogUserIdInput = userId
                         showUserIdDialog = true
@@ -525,7 +524,7 @@ private fun CleanKbApp() {
             Box(modifier = Modifier.fillMaxSize()) {
                 if (currentTabUiState.loading) {
                     when (currentTab) {
-                        QueryTab.TODAY -> EnhancedLoadingState(message = "正在加载...")
+                        QueryTab.TODAY -> TodaySkeletonLoading()
                         QueryTab.WEEK -> WeekSkeletonLoading()
                         QueryTab.FREE_ROOM -> FreeRoomSkeletonLoading()
                         QueryTab.WEATHER -> WeatherLoadingCard()
@@ -934,8 +933,6 @@ private fun WeatherLoadingIcon() {
 @Composable
 private fun SettingsPage(
     userId: String,
-    themeMode: ThemeMode,
-    onThemeChange: (ThemeMode) -> Unit,
     onChangeUserId: () -> Unit
 ) {
     Column(
@@ -987,57 +984,6 @@ private fun SettingsPage(
                 )
             }
         }
-
-        // 主题设置
-        AppCard {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(Spacing.md),
-                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
-            ) {
-                Text(
-                    text = "主题模式",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
-                ) {
-                    ThemeMode.entries.forEach { mode ->
-                        val selected = themeMode == mode
-                        val label = when (mode) {
-                            ThemeMode.SYSTEM -> "跟随系统"
-                            ThemeMode.LIGHT -> "浅色模式"
-                            ThemeMode.DARK -> "深色模式"
-                        }
-                        FilterChip(
-                            selected = selected,
-                            onClick = { onThemeChange(mode) },
-                            label = {
-                                Text(
-                                    label,
-                                    style = MaterialTheme.typography.labelMedium
-                                )
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.primary,
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                borderColor = MaterialTheme.colorScheme.outline,
-                                selectedBorderColor = MaterialTheme.colorScheme.primary,
-                                enabled = true,
-                                selected = selected
-                            )
-                        )
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -1051,64 +997,35 @@ private fun UserSetupPage(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
-                    )
-                )
-            )
-            .padding(Spacing.xl),
+            .background(MaterialTheme.colorScheme.background),
         contentAlignment = Alignment.Center
     ) {
-        AppCard(
-            gradientColors = listOf(
-                MaterialTheme.colorScheme.surface,
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
-            )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(Spacing.xl * 2),
+            verticalArrangement = Arrangement.spacedBy(Spacing.lg),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(Spacing.xl),
-                verticalArrangement = Arrangement.spacedBy(Spacing.lg)
-            ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(Spacing.xs)
-                ) {
-                    Text(
-                        text = "欢迎使用课表",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "首次使用请先输入学号，保存后会自动记住",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                label = { Text("学号") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    focusedLabelColor = MaterialTheme.colorScheme.primary,
+                    cursorColor = MaterialTheme.colorScheme.primary
+                ),
+                shape = RoundedCornerShape(Radius.lg)
+            )
 
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    label = { Text("学号") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        focusedLabelColor = MaterialTheme.colorScheme.primary,
-                        cursorColor = MaterialTheme.colorScheme.primary
-                    ),
-                    shape = RoundedCornerShape(Radius.sm)
-                )
-
-                PrimaryButton(
-                    text = "保存并进入",
-                    onClick = onSave,
-                    enabled = value.trim().isNotBlank()
-                )
-            }
+            PrimaryButton(
+                text = "开始使用",
+                onClick = onSave,
+                enabled = value.trim().isNotBlank()
+            )
         }
     }
 }
@@ -2180,16 +2097,15 @@ private fun displayLocation(raw: String): String {
 
 private fun compactFreeRoomBuilding(room: String, building: String): String {
     var compact = building.trim().replace(Regex("\\s+"), " ")
+    // 先处理中文括号
+    compact = compact.replace("（", "(").replace("）", ")")
+    // 简化楼栋名称：西校区(东)0#楼 -> 0#楼，西校区(西)3号楼 -> 3#楼
+    compact = compact.replace(Regex("西校区\\s*\\(东\\)\\s*(\\d+)\\s*[#号]?楼"), "$1#楼")
+    compact = compact.replace(Regex("西校区\\s*\\(西\\)\\s*(\\d+)\\s*[#号]?楼"), "$1#楼")
     if (compact.isBlank()) return ""
-    val duplicateLabels = listOf(
-        "弘善楼",
-        "弘毅楼",
-        "弘德楼",
-        "合教楼",
-        "合四",
-        "合五"
-    ) + Regex("\\d+号楼").findAll(compact).map { it.value }.toList()
-    duplicateLabels.distinct().forEach { label ->
+    // 去除与教室名重复的部分
+    val labels = listOf("弘善楼", "弘毅楼", "弘德楼", "合教楼", "合四", "合五")
+    labels.forEach { label ->
         if (label.isNotBlank() && room.contains(label) && compact.contains(label)) {
             compact = compact.replace(label, " ").replace(Regex("\\s+"), " ").trim()
         }

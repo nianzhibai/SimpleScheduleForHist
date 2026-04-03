@@ -21,7 +21,7 @@ import com.cleankb.app.ui.theme.SuccessGradient
 import com.cleankb.app.ui.theme.WarningGradient
 
 // ==================== 主题模式 ====================
-enum class ThemeMode { SYSTEM, LIGHT, DARK }
+enum class ThemeMode { SYSTEM, LIGHT }
 
 // ==================== 浅色主题配色 ====================
 private val LightColors = lightColorScheme(
@@ -125,13 +125,8 @@ fun CleanKbTheme(
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     content: @Composable () -> Unit
 ) {
-    val systemDark = isSystemInDarkTheme()
-    val darkTheme = when (themeMode) {
-        ThemeMode.SYSTEM -> systemDark
-        ThemeMode.LIGHT -> false
-        ThemeMode.DARK -> true
-    }
-    val colorScheme = if (darkTheme) DarkColors else LightColors
+    // 始终使用浅色模式
+    val colorScheme = LightColors
     val view = LocalView.current
 
     if (!view.isInEditMode) {

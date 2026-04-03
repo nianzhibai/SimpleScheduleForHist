@@ -72,14 +72,130 @@ fun EnhancedLoadingState(
     message: String = "加载中...",
     modifier: Modifier = Modifier
 ) {
+    TodaySkeletonLoading(modifier)
+}
+
+@Composable
+fun TodaySkeletonLoading(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = Spacing.sm),
+            .padding(horizontal = Spacing.md),
         verticalArrangement = Arrangement.spacedBy(Spacing.md)
     ) {
-        repeat(4) {
-            CourseCardSkeleton()
+        // 标题骨架（"今天课程" + "第X周 | 周X"）
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            ShimmerBlock(
+                modifier = Modifier
+                    .width(100.dp)
+                    .height(20.dp)
+            )
+            ShimmerBlock(
+                modifier = Modifier
+                    .width(120.dp)
+                    .height(14.dp)
+            )
+        }
+
+        // 上午时间段分隔符骨架
+        DayPeriodDividerSkeleton()
+
+        // 上午课程骨架
+        repeat(2) {
+            TimelineCourseCardSkeleton()
+        }
+
+        // 下午时间段分隔符骨架
+        DayPeriodDividerSkeleton()
+
+        // 下午课程骨架
+        repeat(2) {
+            TimelineCourseCardSkeleton()
+        }
+    }
+}
+
+@Composable
+private fun DayPeriodDividerSkeleton() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
+    ) {
+        ShimmerBlock(
+            modifier = Modifier
+                .size(20.dp),
+            shape = RoundedCornerShape(Radius.full)
+        )
+        ShimmerBlock(
+            modifier = Modifier
+                .width(40.dp)
+                .height(14.dp)
+        )
+    }
+}
+
+@Composable
+private fun TimelineCourseCardSkeleton() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md)
+    ) {
+        // 时间轴区域
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.width(24.dp)
+        ) {
+            ShimmerBlock(
+                modifier = Modifier.size(10.dp),
+                shape = RoundedCornerShape(Radius.full)
+            )
+            ShimmerBlock(
+                modifier = Modifier
+                    .width(2.dp)
+                    .height(32.dp)
+            )
+        }
+
+        // 课程卡片
+        val shape = RoundedCornerShape(Radius.lg)
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(Spacing.md)
+        ) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(Spacing.sm)
+            ) {
+                // 课程名称
+                ShimmerBlock(
+                    modifier = Modifier
+                        .fillMaxWidth(0.55f)
+                        .height(18.dp)
+                )
+                // 教师
+                ShimmerBlock(
+                    modifier = Modifier
+                        .fillMaxWidth(0.35f)
+                        .height(14.dp)
+                )
+                // 教室
+                ShimmerBlock(
+                    modifier = Modifier
+                        .fillMaxWidth(0.7f)
+                        .height(14.dp)
+                )
+                // 时间
+                ShimmerBlock(
+                    modifier = Modifier
+                        .fillMaxWidth(0.4f)
+                        .height(12.dp)
+                )
+            }
         }
     }
 }

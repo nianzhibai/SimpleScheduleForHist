@@ -189,7 +189,7 @@ private fun BuildingFilterSection(
         LazyRow(
             modifier = Modifier.weight(1f),
             horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            contentPadding = PaddingValues(end = Spacing.xs)
+            contentPadding = PaddingValues(end = Spacing.sm)
         ) {
             items(buildingOrder, key = { it }) { building ->
                 BuildingFilterChip(
@@ -475,10 +475,10 @@ private fun RecommendedRoomCard(room: CampusService.FreeRoomItem) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(Spacing.md),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 左侧：教室信息
+            // 左侧：教室信息（占据主要空间）
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -529,14 +529,19 @@ private fun RecommendedRoomCard(room: CampusService.FreeRoomItem) {
             // 右侧：空闲节次
             Column(
                 horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
                     text = "空闲节次",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
                 )
-                PeriodFlow(periods = room.freePeriods)
+                Text(
+                    text = room.freePeriods.joinToString(" "),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
     }
@@ -723,9 +728,7 @@ private fun CandidateRoomCard(room: CampusService.FreeRoomItem) {
                 Text(
                     text = room.room,
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    fontWeight = FontWeight.SemiBold
                 )
 
                 val compactBuilding = compactFreeRoomBuilding(room.room, room.building)
@@ -743,9 +746,7 @@ private fun CandidateRoomCard(room: CampusService.FreeRoomItem) {
                         Text(
                             text = compactBuilding,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -924,16 +925,15 @@ private fun formatPeriods(periods: List<Int>): String {
 
 private fun compactFreeRoomBuilding(room: String, building: String): String {
     var compact = building.trim().replace(Regex("\\s+"), " ")
+    // 先处理中文括号
+    compact = compact.replace("（", "(").replace("）", ")")
+    // 简化楼栋名称：西校区(东)0#楼 -> 0#楼，西校区(西)3号楼 -> 3#楼
+    compact = compact.replace(Regex("西校区\\s*\\(东\\)\\s*(\\d+)\\s*[#号]?楼"), "$1#楼")
+    compact = compact.replace(Regex("西校区\\s*\\(西\\)\\s*(\\d+)\\s*[#号]?楼"), "$1#楼")
     if (compact.isBlank()) return ""
-    val duplicateLabels = listOf(
-        "弘善楼",
-        "弘毅楼",
-        "弘德楼",
-        "合教楼",
-        "合四",
-        "合五"
-    ) + Regex("\\d+号楼").findAll(compact).map { it.value }.toList()
-    duplicateLabels.distinct().forEach { label ->
+    // 去除与教室名重复的部分
+    val labels = listOf("弘善楼", "弘毅楼", "弘德楼", "合教楼", "合四", "合五")
+    labels.forEach { label ->
         if (label.isNotBlank() && room.contains(label) && compact.contains(label)) {
             compact = compact.replace(label, " ").replace(Regex("\\s+"), " ").trim()
         }
