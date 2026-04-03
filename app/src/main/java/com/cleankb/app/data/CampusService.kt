@@ -1,5 +1,6 @@
 package com.cleankb.app.data
 
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -18,6 +19,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import kotlin.math.ceil
 import kotlin.math.pow
+
+private const val TAG = "CampusService"
 
 class CampusService {
 
@@ -121,7 +124,7 @@ class CampusService {
         val nextPeriod: Int?,
         val timeStatus: String,
         val targetPeriod: Int,
-        val anchorBuilding: String,
+        val lastCourseBuilding: String,
         val activeBuilding: String?,
         val availableBuildings: List<String>,
         val busyPeriods: List<Int>,
@@ -341,7 +344,11 @@ class CampusService {
     }
 
     private fun postEncryptedJson(apiUrl: String, pairs: LinkedHashMap<String, String>, cfg: CommonConfig): JSONObject? {
+        val startTime = System.currentTimeMillis()
         val raw = joinRawPairs(pairs)
+        val action = pairs["action"] ?: "unknown"
+        val step = pairs["step"] ?: "unknown"
+        Log.d(TAG, "postEncryptedJson开始: action=$action, step=$step")
         val payload = linkedMapOf(
             "param" to encryptParam(raw, cfg.encryptKey),
             "param2" to calcParam2(raw),
@@ -351,17 +358,21 @@ class CampusService {
             "echo" to randomEcho(),
             "xqerSign" to md5Hex("x"),
         )
-        return postForm(apiUrl, payload)
+        val result = postForm(apiUrl, payload)
+        Log.d(TAG, "postEncryptedJson完成: action=$action, step=$step, 耗时=${System.currentTimeMillis() - startTime}ms, 结果=${if (result != null) "成功" else "失败"}")
+        return result
     }
 
     private fun postForm(url: String, data: LinkedHashMap<String, String>): JSONObject? {
+        val startTime = System.currentTimeMillis()
         val body = data.entries.joinToString("&") {
             URLEncoder.encode(it.key, "UTF-8") + "=" + URLEncoder.encode(it.value, "UTF-8")
         }
+        Log.d(TAG, "postForm开始: url=$url, body长度=${body.length}")
         val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
-            connectTimeout = 20000
-            readTimeout = 20000
+            connectTimeout = 10000
+            readTimeout = 10000
             doOutput = true
             setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
             setRequestProperty("Accept", "application/json,text/plain,*/*")
@@ -370,12 +381,15 @@ class CampusService {
         return try {
             OutputStreamWriter(conn.outputStream, StandardCharsets.UTF_8).use { it.write(body) }
             val code = conn.responseCode
+            Log.d(TAG, "postForm响应: code=$code, 耗时=${System.currentTimeMillis() - startTime}ms")
             val input = if (code in 200..299) conn.inputStream else conn.errorStream
             val text = BufferedReader(input.reader(StandardCharsets.UTF_8)).use { r ->
                 r.readLines().joinToString("\n")
             }
+            Log.d(TAG, "postForm完成: 响应长度=${text.length}, 总耗时=${System.currentTimeMillis() - startTime}ms")
             if (text.isBlank()) null else JSONObject(text)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e(TAG, "postForm异常: url=$url, 耗时=${System.currentTimeMillis() - startTime}ms, 错误=${e.message}")
             null
         } finally {
             conn.disconnect()
@@ -383,6 +397,8 @@ class CampusService {
     }
 
     private fun currentXnxq(apiUrl: String, userId: String, cfg: CommonConfig): String {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "currentXnxq开始: userId=$userId")
         val base = linkedMapOf(
             "userId" to userId,
             "usertype" to cfg.userType,
@@ -390,26 +406,43 @@ class CampusService {
         if (cfg.xxdm.isNotBlank()) base["xxdm"] = cfg.xxdm.trim()
 
         for ((action, step) in listOf("getXtgn" to "xnxq", "getKb" to "xnxq")) {
+            Log.d(TAG, "currentXnxq尝试: action=$action, step=$step")
             val p = LinkedHashMap(base)
             p["action"] = action
             p["step"] = step
-            val j = postEncryptedJson(apiUrl, p, cfg) ?: continue
-            val arr = j.optJSONArray("xnxq") ?: continue
-            if (arr.length() == 0) continue
+            val j = postEncryptedJson(apiUrl, p, cfg)
+            if (j == null) {
+                Log.w(TAG, "currentXnxq: action=$action 返回null")
+                continue
+            }
+            val arr = j.optJSONArray("xnxq")
+            if (arr == null || arr.length() == 0) {
+                Log.w(TAG, "currentXnxq: action=$action xnxq数组为空")
+                continue
+            }
             for (i in 0 until arr.length()) {
                 val t = arr.optJSONObject(i) ?: continue
                 if (t.optString("dqxq").trim() == "1") {
                     val dm = t.optString("dm").trim()
-                    if (dm.isNotBlank()) return dm
+                    if (dm.isNotBlank()) {
+                        Log.d(TAG, "currentXnxq成功: dm=$dm, 耗时=${System.currentTimeMillis() - startTime}ms")
+                        return dm
+                    }
                 }
             }
             val dm = arr.optJSONObject(0)?.optString("dm", "")?.trim().orEmpty()
-            if (dm.isNotBlank()) return dm
+            if (dm.isNotBlank()) {
+                Log.d(TAG, "currentXnxq成功(备用): dm=$dm, 耗时=${System.currentTimeMillis() - startTime}ms")
+                return dm
+            }
         }
+        Log.e(TAG, "currentXnxq失败: 耗时=${System.currentTimeMillis() - startTime}ms")
         error("无法获取学期 xnxq")
     }
 
     private fun fetchKbDetail(apiUrl: String, userId: String, xnxq: String, week: String, cfg: CommonConfig): JSONObject {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "fetchKbDetail开始: userId=$userId, xnxq=$xnxq, week=$week")
         val common = linkedMapOf(
             "action" to "getKb",
             "step" to "kbdetail_bz",
@@ -433,10 +466,16 @@ class CampusService {
                 putAll(common); put("userId", suffix); put("uuid", userId)
             }
         )
-        for (p in branches) {
+        for ((idx, p) in branches.withIndex()) {
+            Log.d(TAG, "fetchKbDetail尝试分支: branch=$idx")
             val j = postEncryptedJson(apiUrl, p, cfg)
-            if (j != null && j.has("zc")) return j
+            if (j != null && j.has("zc")) {
+                Log.d(TAG, "fetchKbDetail成功: branch=$idx, 耗时=${System.currentTimeMillis() - startTime}ms")
+                return j
+            }
+            Log.w(TAG, "fetchKbDetail分支失败: branch=$idx, hasZc=${j?.has("zc")}")
         }
+        Log.e(TAG, "fetchKbDetail失败: 所有分支都失败, 耗时=${System.currentTimeMillis() - startTime}ms")
         error("无法获取课表详情")
     }
 
@@ -474,9 +513,13 @@ class CampusService {
     }
 
     fun queryTodayData(config: CommonConfig): TodaySchedule {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "queryTodayData开始: userId=${config.userId}")
         val userId = normalizeUserId(config.userId, config.xxdm)
         val api = normalizeApiUrl(config.serviceUrl)
+        Log.d(TAG, "queryTodayData: 获取学期信息...")
         val xnxq = currentXnxq(api, userId, config)
+        Log.d(TAG, "queryTodayData: 学期=$xnxq, 获取课表详情...")
         val kb = fetchKbDetail(api, userId, xnxq, "", config)
         val weekday = LocalDateTime.now().dayOfWeek.value
         val arr = kb.optJSONArray("week$weekday") ?: JSONArray()
@@ -485,13 +528,15 @@ class CampusService {
             .sortedBy { periodSortKey(it) }
             .map { mapCourse(it) }
 
-        return TodaySchedule(
+        val result = TodaySchedule(
             date = LocalDate.now(),
             weekday = weekday,
             term = xnxq,
             currentWeek = kb.optString("zc"),
             courses = list
         )
+        Log.d(TAG, "queryTodayData完成: 总耗时=${System.currentTimeMillis() - startTime}ms, 课程数=${list.size}")
+        return result
     }
 
     fun queryToday(config: CommonConfig): String {
@@ -509,9 +554,13 @@ class CampusService {
     }
 
     fun queryWeekData(config: CommonConfig): WeekSchedule {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "queryWeekData开始: userId=${config.userId}")
         val userId = normalizeUserId(config.userId, config.xxdm)
         val api = normalizeApiUrl(config.serviceUrl)
+        Log.d(TAG, "queryWeekData: 获取学期信息...")
         val xnxq = currentXnxq(api, userId, config)
+        Log.d(TAG, "queryWeekData: 学期=$xnxq, 获取课表详情...")
         val kb = fetchKbDetail(api, userId, xnxq, "", config)
 
         val days = (1..7).map { i ->
@@ -521,12 +570,14 @@ class CampusService {
                 .map { mapCourse(it) }
             WeekDaySchedule(weekday = i, courses = list)
         }
-        return WeekSchedule(
+        val result = WeekSchedule(
             date = LocalDate.now(),
             term = xnxq,
             currentWeek = kb.optString("zc"),
             days = days
         )
+        Log.d(TAG, "queryWeekData完成: 总耗时=${System.currentTimeMillis() - startTime}ms, 课程数=${days.sumOf { it.courses.size }}")
+        return result
     }
 
     fun queryWeek(config: CommonConfig): String {
@@ -1092,12 +1143,17 @@ class CampusService {
         config: CommonConfig,
         limit: Int,
         currentPeriodOverride: Int?,
-        selectedBuilding: String? = null
+        selectedBuilding: String? = null,
+        lastSelectedBuilding: String? = null
     ): FreeRoomSchedule {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "queryFreeClassroomsData开始: userId=${config.userId}, limit=$limit, selectedBuilding=$selectedBuilding, lastSelectedBuilding=$lastSelectedBuilding")
         val userId = normalizeUserId(config.userId, config.xxdm)
         val api = normalizeApiUrl(config.serviceUrl)
 
+        Log.d(TAG, "queryFreeClassroomsData: 获取学期信息...")
         val xnxq = currentXnxq(api, userId, config)
+        Log.d(TAG, "queryFreeClassroomsData: 学期=$xnxq, 获取课表详情...")
         val kb = fetchKbDetail(api, userId, xnxq, "", config)
         val now = LocalDateTime.now()
         val date = now.toLocalDate()
@@ -1124,26 +1180,24 @@ class CampusService {
         val estimated = periodCtx.currentPeriod ?: 0
         val basePeriod = periodCtx.currentPeriod ?: periodCtx.nextPeriod ?: schoolMax
         val target = basePeriod.coerceIn(1, schoolMax)
-        val preferOrder = listOf("弘善楼", "弘毅楼")
-        val anchor = detectAnchorBuilding(
+        val lastBuilding = detectLastCourseBuilding(
             dayCourses = dayCourses,
             currentPeriod = periodCtx.currentPeriod,
             nextPeriod = periodCtx.nextPeriod
         )
-        val selectedToken = selectedBuilding?.trim()?.takeIf { it.isNotBlank() }
-        val defaultToken = anchor.takeIf { it.isNotBlank() }
-        val activeToken = selectedToken ?: defaultToken
+        val activeToken = selectedBuilding?.trim()?.takeIf { it.isNotBlank() }
+            ?: lastBuilding.takeIf { it.isNotBlank() }
+            ?: lastSelectedBuilding?.trim()?.takeIf { it.isNotBlank() }
 
-        val prioritizedJxls = prioritizeJxls(
-            source = fetchJxlListCached(api, userId, config),
-            preferOrder = preferOrder,
-            anchor = anchor
-        )
+        Log.d(TAG, "queryFreeClassroomsData: 获取教学楼列表...")
+        val jxlListStartTime = System.currentTimeMillis()
+        val jxlList = fetchJxlListCached(api, userId, config)
+        Log.d(TAG, "queryFreeClassroomsData: 教学楼列表获取完成, 数量=${jxlList.size}, 耗时=${System.currentTimeMillis() - jxlListStartTime}ms")
 
         val scanPlan = if (activeToken == null) {
             emptyList()
         } else {
-            prioritizedJxls.filter { matchesBuildingSelection(extractBuildingToken(it.second), activeToken) }
+            jxlList.filter { matchesBuildingSelection(extractBuildingToken(it.second), activeToken) }
         }
 
         val allRooms = mutableListOf<RoomCandidate>()
@@ -1151,22 +1205,27 @@ class CampusService {
         val activeScanToken = activeToken ?: ""
         val batchSize = 4
         var offset = 0
+        var batchIndex = 0
         while (offset < scanPlan.size) {
+            batchIndex++
             val end = minOf(offset + batchSize, scanPlan.size)
             val batch = scanPlan.subList(offset, end)
+            Log.d(TAG, "queryFreeClassroomsData: 扫描批次$batchIndex, 楼栋=${batch.map { it.second }}")
+            val batchStartTime = System.currentTimeMillis()
             val result = scanBuildingsParallel(api, userId, date, batch, config, schoolMax)
             mergeScanResult(allRooms, periodCount, result)
+            Log.d(TAG, "queryFreeClassroomsData: 批次${batchIndex}完成, 耗时=${System.currentTimeMillis() - batchStartTime}ms, 新增房间=${result.rooms.size}")
             offset = end
 
             val relevantCount = allRooms.count { matchesBuildingSelection(extractBuildingToken(it.building), activeScanToken) }
             val shouldStop = relevantCount >= limit
-            if (shouldStop) break
+            if (shouldStop) {
+                Log.d(TAG, "queryFreeClassroomsData: 已找到足够房间($relevantCount>=limit=$limit), 停止扫描")
+                break
+            }
         }
 
-        val availableBuildings = buildList {
-            if (anchor.isNotBlank()) add(anchor)
-            addAll(fixedBuildingOptions())
-        }.distinct()
+        val availableBuildings = fixedBuildingOptions()
 
         val filteredRooms = if (activeToken == null) {
             allRooms
@@ -1180,7 +1239,7 @@ class CampusService {
             filteredRooms
         }
 
-        val sorted = roomPool.sortedByDescending { scoreRoom(it, target, schoolMax, preferOrder, anchor) }
+        val sorted = roomPool.sortedByDescending { scoreRoom(it, target, schoolMax) }
         val top = sorted.take(limit.coerceAtLeast(1))
 
         val roomItems = top.map { r ->
@@ -1196,7 +1255,7 @@ class CampusService {
             )
         }
 
-        return FreeRoomSchedule(
+        val result = FreeRoomSchedule(
             date = date,
             weekday = weekday,
             term = xnxq,
@@ -1207,7 +1266,7 @@ class CampusService {
             nextPeriod = periodCtx.nextPeriod,
             timeStatus = periodCtx.status,
             targetPeriod = target,
-            anchorBuilding = anchor,
+            lastCourseBuilding = lastBuilding,
             activeBuilding = activeToken,
             availableBuildings = availableBuildings,
             busyPeriods = busy.sorted(),
@@ -1215,6 +1274,8 @@ class CampusService {
             recommended = roomItems.firstOrNull(),
             rooms = roomItems
         )
+        Log.d(TAG, "queryFreeClassroomsData完成: 总耗时=${System.currentTimeMillis() - startTime}ms, 扫描楼栋=${batchIndex}批, 总房间=${allRooms.size}, 推荐房间=${roomItems.size}")
+        return result
     }
 
     fun queryFreeClassrooms(config: CommonConfig, limit: Int, currentPeriodOverride: Int?): String {
@@ -1223,10 +1284,8 @@ class CampusService {
             appendLine("日期: ${data.date}  周${data.weekday}")
             appendLine("学期: ${data.term}  当前周(接口): ${data.currentWeek}")
             appendLine("作息模式: ${data.season}")
-            appendLine("优先级: 就近 > 连续刚空闲 > 楼层/楼宇偏好")
-            appendLine("楼层策略: 1xx/2xx > 3xx；4xx/5xx已排除")
             appendLine("时间状态: ${data.timeStatus}；推荐目标第${data.targetPeriod}节")
-            if (data.anchorBuilding.isNotBlank()) appendLine("就近锚点: ${data.anchorBuilding}（同楼 > 同片区 > 其他）")
+            if (data.lastCourseBuilding.isNotBlank()) appendLine("最近上课楼栋: ${data.lastCourseBuilding}")
             appendLine("------------------------------------------------------------")
             appendLine("你的有课节次: ${data.busyPeriods.joinToString(", ")}")
             appendLine("你的空档节次: ${data.freePeriods.joinToString(", ")}")
@@ -1266,27 +1325,44 @@ class CampusService {
         cfg: CommonConfig,
         schoolMax: Int,
     ): BuildingScanResult {
-        if (jxls.isEmpty()) return BuildingScanResult(emptyList(), emptyMap())
+        val startTime = System.currentTimeMillis()
+        if (jxls.isEmpty()) {
+            Log.d(TAG, "scanBuildingsParallel: 空列表，直接返回")
+            return BuildingScanResult(emptyList(), emptyMap())
+        }
         val poolSize = minOf(10, maxOf(3, jxls.size))
+        Log.d(TAG, "scanBuildingsParallel开始: 楼栋数=${jxls.size}, 线程池=$poolSize, 楼栋=${jxls.map { it.second }}")
         val executor = Executors.newFixedThreadPool(poolSize)
         try {
             val tasks = jxls.map { (dm, building) ->
                 Callable {
-                    scanSingleBuilding(api, userId, date, dm, building, cfg, schoolMax)
+                    val taskStart = System.currentTimeMillis()
+                    Log.d(TAG, "scanSingleBuilding开始: building=$building, dm=$dm")
+                    val result = scanSingleBuilding(api, userId, date, dm, building, cfg, schoolMax)
+                    Log.d(TAG, "scanSingleBuilding完成: building=$building, 耗时=${System.currentTimeMillis() - taskStart}ms, 房间数=${result?.rooms?.size ?: 0}")
+                    result
                 }
             }
             val futures = executor.invokeAll(tasks, 9, TimeUnit.SECONDS)
 
             val allRooms = mutableListOf<RoomCandidate>()
             val periodCount = mutableMapOf<Int, Int>()
+            var cancelledCount = 0
+            var failedCount = 0
             futures.forEach { f ->
-                if (f.isCancelled) return@forEach
+                if (f.isCancelled) {
+                    cancelledCount++
+                    return@forEach
+                }
                 try {
                     val result = f.get() ?: return@forEach
                     mergeScanResult(allRooms, periodCount, result)
-                } catch (_: Exception) {
+                } catch (e: Exception) {
+                    failedCount++
+                    Log.w(TAG, "scanBuildingsParallel: 任务异常: ${e.message}")
                 }
             }
+            Log.d(TAG, "scanBuildingsParallel完成: 总耗时=${System.currentTimeMillis() - startTime}ms, 取消=$cancelledCount, 失败=$failedCount, 总房间=${allRooms.size}")
             return BuildingScanResult(allRooms, periodCount)
         } finally {
             executor.shutdownNow()
@@ -1302,9 +1378,23 @@ class CampusService {
         cfg: CommonConfig,
         schoolMax: Int,
     ): BuildingScanResult? {
-        val detail = fetchJxlDetailCached(api, userId, date.toString(), dm, cfg) ?: return null
-        val result = detail.optJSONObject("result") ?: return null
-        val jsxx = result.optJSONArray("jsxx") ?: return null
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "scanSingleBuilding: 获取详情 building=$building, dm=$dm")
+        val detail = fetchJxlDetailCached(api, userId, date.toString(), dm, cfg)
+        if (detail == null) {
+            Log.w(TAG, "scanSingleBuilding: 详情为null building=$building, 耗时=${System.currentTimeMillis() - startTime}ms")
+            return null
+        }
+        val result = detail.optJSONObject("result")
+        if (result == null) {
+            Log.w(TAG, "scanSingleBuilding: result为null building=$building")
+            return null
+        }
+        val jsxx = result.optJSONArray("jsxx")
+        if (jsxx == null) {
+            Log.w(TAG, "scanSingleBuilding: jsxx为null building=$building")
+            return null
+        }
 
         val rooms = mutableListOf<RoomCandidate>()
         val periodCount = mutableMapOf<Int, Int>()
@@ -1332,21 +1422,8 @@ class CampusService {
             if (freePeriods.isEmpty()) continue
             rooms += RoomCandidate(room, building, cap, roomType, freePeriods.sorted(), rawStatus)
         }
+        Log.d(TAG, "scanSingleBuilding完成: building=$building, 耗时=${System.currentTimeMillis() - startTime}ms, 房间数=${rooms.size}")
         return BuildingScanResult(rooms, periodCount)
-    }
-
-    private fun prioritizeJxls(
-        source: List<Pair<String, String>>,
-        preferOrder: List<String>,
-        anchor: String
-    ): List<Pair<String, String>> {
-        return source.sortedByDescending { (_, building) ->
-            val roomBuilding = extractBuildingToken(building)
-            var score = 0
-            score += buildingOrderBonus(building, preferOrder)
-            score += proximityBonus(roomBuilding, anchor)
-            score
-        }
     }
 
     private fun fixedBuildingOptions(): List<String> {
@@ -1387,27 +1464,17 @@ class CampusService {
         }
     }
 
-    private fun sortBuildingTokens(
-        buildings: List<String>,
-        preferOrder: List<String>,
-        anchor: String
-    ): List<String> {
-        return buildings.sortedByDescending { b ->
-            var score = 0
-            score += buildingOrderBonus(b, preferOrder)
-            score += proximityBonus(b, anchor)
-            score
-        }
-    }
-
     private fun fetchJxlListCached(api: String, userId: String, cfg: CommonConfig): List<Pair<String, String>> {
         val now = System.currentTimeMillis()
         synchronized(cacheLock) {
             if (jxlListCache.isNotEmpty() && now - jxlListCacheAt < 6 * 60 * 60 * 1000L) {
+                Log.d(TAG, "fetchJxlListCached: 命中缓存, 数量=${jxlListCache.size}")
                 return jxlListCache
             }
         }
+        Log.d(TAG, "fetchJxlListCached: 缓存未命中，从API获取...")
         val fresh = fetchJxlList(api, userId, cfg)
+        Log.d(TAG, "fetchJxlListCached: API返回, 数量=${fresh.size}")
         synchronized(cacheLock) {
             jxlListCache = fresh
             jxlListCacheAt = now
@@ -1427,10 +1494,14 @@ class CampusService {
         synchronized(cacheLock) {
             val hit = detailCache[key]
             if (hit != null && now - hit.at < detailCacheTtlMs) {
+                Log.d(TAG, "fetchJxlDetailCached: 命中缓存 dm=$dm")
                 return hit.detail
             }
         }
+        Log.d(TAG, "fetchJxlDetailCached: 缓存未命中 dm=$dm，从API获取...")
+        val fetchStart = System.currentTimeMillis()
         val fresh = fetchJxlDetail(api, userId, date, dm, cfg)
+        Log.d(TAG, "fetchJxlDetailCached: API返回 dm=$dm, 耗时=${System.currentTimeMillis() - fetchStart}ms, 结果=${if (fresh != null) "成功" else "失败"}")
         synchronized(cacheLock) {
             detailCache[key] = DetailCacheEntry(now, fresh)
             if (detailCache.size > 300) {
@@ -1442,23 +1513,37 @@ class CampusService {
     }
 
     private fun fetchJxlList(api: String, userId: String, cfg: CommonConfig): List<Pair<String, String>> {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "fetchJxlList开始: userId=$userId")
         val pairs = linkedMapOf(
             "userId" to userId,
             "action" to "oriKxjs",
             "step" to "jxl",
             "flag" to "1",
         )
-        val j = postEncryptedJson(api, pairs, cfg) ?: return emptyList()
-        val arr = j.optJSONArray("resultSet") ?: return emptyList()
-        return (0 until arr.length()).mapNotNull {
+        val j = postEncryptedJson(api, pairs, cfg)
+        if (j == null) {
+            Log.e(TAG, "fetchJxlList: 返回null, 耗时=${System.currentTimeMillis() - startTime}ms")
+            return emptyList()
+        }
+        val arr = j.optJSONArray("resultSet")
+        if (arr == null) {
+            Log.e(TAG, "fetchJxlList: resultSet为null, 耗时=${System.currentTimeMillis() - startTime}ms")
+            return emptyList()
+        }
+        val result = (0 until arr.length()).mapNotNull {
             val o = arr.optJSONObject(it) ?: return@mapNotNull null
             val dm = o.optString("dm", "").trim()
             val mc = o.optString("mc", "").trim()
             if (dm.isBlank() || mc.isBlank()) null else dm to mc
         }
+        Log.d(TAG, "fetchJxlList完成: 数量=${result.size}, 耗时=${System.currentTimeMillis() - startTime}ms")
+        return result
     }
 
     private fun fetchJxlDetail(api: String, userId: String, date: String, dm: String, cfg: CommonConfig): JSONObject? {
+        val startTime = System.currentTimeMillis()
+        Log.d(TAG, "fetchJxlDetail开始: dm=$dm, date=$date")
         val p = linkedMapOf(
             "userId" to userId,
             "usertype" to cfg.userType,
@@ -1467,7 +1552,9 @@ class CampusService {
             "rq" to date,
             "jxl" to dm,
         )
-        return postEncryptedJson(api, p, cfg)
+        val result = postEncryptedJson(api, p, cfg)
+        Log.d(TAG, "fetchJxlDetail完成: dm=$dm, 耗时=${System.currentTimeMillis() - startTime}ms, 结果=${if (result != null) "成功" else "失败"}")
+        return result
     }
 
     private fun parsePeriodsFromCourse(c: JSONObject): Set<Int> {
@@ -1541,30 +1628,7 @@ class CampusService {
         return ""
     }
 
-    private fun cluster(token: String): String = when (token) {
-        "弘善楼", "弘毅楼", "弘德楼" -> "A"
-        "3号楼", "4号楼", "5号楼" -> "B"
-        "6号楼", "7号楼", "8号楼", "9号楼", "10号楼", "11号楼" -> "C"
-        "0号楼", "1号楼", "2号楼" -> "D"
-        else -> ""
-    }
-
-    private fun proximityBonus(roomBuilding: String, anchorBuilding: String): Int {
-        if (anchorBuilding.isBlank()) return 0
-        if (roomBuilding == anchorBuilding) return 7600
-        val c1 = cluster(roomBuilding)
-        val c2 = cluster(anchorBuilding)
-        if (c1.isNotBlank() && c1 == c2) return 2800
-        return 0
-    }
-
-    private fun buildingOrderBonus(building: String, order: List<String>): Int {
-        val total = order.size
-        order.forEachIndexed { i, kw -> if (kw.isNotBlank() && kw in building) return (total - i) * 900 }
-        return 0
-    }
-
-    private fun detectAnchorBuilding(
+    private fun detectLastCourseBuilding(
         dayCourses: List<JSONObject>,
         currentPeriod: Int?,
         nextPeriod: Int?
@@ -1628,7 +1692,7 @@ class CampusService {
         return 0
     }
 
-    private fun scoreRoom(r: RoomCandidate, targetPeriod: Int, maxP: Int, order: List<String>, anchor: String): Double {
+    private fun scoreRoom(r: RoomCandidate, targetPeriod: Int, maxP: Int): Double {
         val freeSet = r.freePeriods.toSet()
         val next = nextFreePeriod(freeSet, targetPeriod, maxP) ?: return -1e9
         val wait = (next - targetPeriod).coerceAtLeast(0)
@@ -1642,13 +1706,10 @@ class CampusService {
         }
 
         var s = 0.0
-        s += buildingOrderBonus(r.building, order)
-        s += proximityBonus(extractBuildingToken(r.building), anchor)
         s += floorBonus(r.room)
         s += roomTypeBonus(r.roomType)
         s += run * 420
         s += r.freePeriods.size * 8
-        s += minOf(r.capacity, 200) * 0.08
         s -= wait * 360
         s += recentBonus
         return s

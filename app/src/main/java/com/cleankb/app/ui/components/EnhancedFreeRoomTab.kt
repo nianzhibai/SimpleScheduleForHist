@@ -118,7 +118,7 @@ fun EnhancedFreeRoomTab(
         item {
             if (data.recommended == null) {
                 EmptyRecommendationCard(
-                    buildingLabel = selectedBuilding ?: data.anchorBuilding
+                    buildingLabel = selectedBuilding ?: data.lastCourseBuilding
                 )
             } else {
                 RecommendedRoomCard(room = data.recommended)
@@ -498,7 +498,8 @@ private fun RecommendedRoomCard(room: CampusService.FreeRoomItem) {
                         text = room.room,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1
                     )
                 }
 
@@ -518,7 +519,8 @@ private fun RecommendedRoomCard(room: CampusService.FreeRoomItem) {
                         Text(
                             text = compactBuilding,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                            maxLines = 1
                         )
                     }
                 }

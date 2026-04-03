@@ -146,8 +146,9 @@ enum class QueryTab(val title: String) {
 }
 
 private const val PREFS_NAME = "clean_kb_prefs"
-private const val KEY_USER_ID = "saved_user_id"
+private const val KEY_USER_ID = "user_id"
 private const val KEY_BUILDING_ORDER = "free_room_building_order"
+private const val KEY_LAST_SELECTED_BUILDING = "last_selected_building"
 private const val KEY_THEME_MODE = "theme_mode"
 private const val DEFAULT_SERVICE_URL = "https://api.xiqueer.com/manager/"
 private const val DEFAULT_USER_TYPE = "STU"
@@ -219,6 +220,7 @@ private fun CleanKbApp() {
     var freeRoomData by remember { mutableStateOf<CampusService.FreeRoomSchedule?>(null) }
     var weatherData by remember { mutableStateOf<CampusService.WeatherSummary?>(null) }
     var selectedFreeRoomBuilding by remember { mutableStateOf<String?>(null) }
+    val lastSelectedBuilding = remember { prefs.getString(KEY_LAST_SELECTED_BUILDING, "")?.trim()?.takeIf { it.isNotBlank() } }
     var freeRoomBuildingOrder by remember { mutableStateOf(loadBuildingOrder(prefs)) }
     var todayUiState by remember { mutableStateOf(RequestUiState()) }
     var weekUiState by remember { mutableStateOf(RequestUiState()) }
@@ -315,7 +317,8 @@ private fun CleanKbApp() {
                                 config = cfg,
                                 limit = DEFAULT_ROOM_LIMIT,
                                 currentPeriodOverride = null,
-                                selectedBuilding = selectedFreeRoomBuilding
+                                selectedBuilding = selectedFreeRoomBuilding,
+                                lastSelectedBuilding = lastSelectedBuilding
                             )
                         )
                         QueryTab.WEATHER -> TabLoadResult.Weather(service.queryWeatherData())
@@ -543,6 +546,9 @@ private fun CleanKbApp() {
                             },
                             onBuildingSelect = { b ->
                                 selectedFreeRoomBuilding = b
+                                if (b != null) {
+                                    prefs.edit().putString(KEY_LAST_SELECTED_BUILDING, b).apply()
+                                }
                                 loadData(QueryTab.FREE_ROOM)
                             }
                         )
@@ -1440,7 +1446,7 @@ private fun FreeRoomTab(
     var dragPointerViewportX by remember { mutableStateOf(0f) }
     var dragTouchAnchorX by remember { mutableStateOf(0f) }
     var autoScrollSpeed by remember { mutableStateOf(0f) }
-    val anchorOption = mappedOptionForAnchor(data.anchorBuilding)
+    val lastBuildingOption = mappedOptionForBuilding(data.lastCourseBuilding)
     val orderedOptions = buildingOrder
     val edgeTriggerPx = with(density) { 88.dp.toPx() }
     val maxAutoScrollPerFrame = with(density) { 4.dp.toPx() }
@@ -1543,37 +1549,37 @@ private fun FreeRoomTab(
 
         // 楼栋选择器
         item {
-            val anchorLabel = data.anchorBuilding.ifBlank { "未定位最近楼" }
+            val lastBuildingLabel = data.lastCourseBuilding.ifBlank { "未定位最近楼" }
             LazyRow(
                 state = chipRowState,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                 userScrollEnabled = draggingKey == null
             ) {
                 item {
-                    if (anchorOption == null || anchorOption !in orderedOptions) {
+                    if (lastBuildingOption == null || lastBuildingOption !in orderedOptions) {
                         BuildingChip(
-                            label = anchorLabel,
+                            label = lastBuildingLabel,
                             selected = selectedBuilding == null,
                             onClick = { onBuildingSelect(null) }
                         )
                     }
                 }
                 items(orderedOptions, key = { it }) { building ->
-                    val isAnchorChip = building == anchorOption
+                    val isLastBuildingChip = building == lastBuildingOption
                     val itemOffset = chipRowState.layoutInfo.visibleItemsInfo
                         .firstOrNull { it.key == building }
                         ?.offset
                         ?.toFloat()
                         ?: 0f
                     ReorderableBuildingChip(
-                        label = if (isAnchorChip) anchorLabel else building,
-                        selected = if (isAnchorChip) {
-                            selectedBuilding == null || selectedBuilding == anchorOption
+                        label = if (isLastBuildingChip) lastBuildingLabel else building,
+                        selected = if (isLastBuildingChip) {
+                            selectedBuilding == null || selectedBuilding == lastBuildingOption
                         } else {
                             selectedBuilding == building
                         },
                         onClick = {
-                            if (isAnchorChip) onBuildingSelect(null) else onBuildingSelect(building)
+                            if (isLastBuildingChip) onBuildingSelect(null) else onBuildingSelect(building)
                         },
                         isDragging = draggingKey == building,
                         dragOffsetX = if (draggingKey == building) {
@@ -2202,8 +2208,8 @@ private fun loadBuildingOrder(prefs: android.content.SharedPreferences): List<St
     return normalizeBuildingOrder(raw.split('|').map { it.trim() }.filter { it.isNotBlank() })
 }
 
-private fun mappedOptionForAnchor(anchorBuilding: String): String? {
-    return when (anchorBuilding.trim()) {
+private fun mappedOptionForBuilding(building: String): String? {
+    return when (building.trim()) {
         "弘善楼" -> "弘善楼"
         "弘毅楼" -> "弘毅楼"
         "3号楼" -> "西校区(东)3号楼"
